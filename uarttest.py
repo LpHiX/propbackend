@@ -5,7 +5,7 @@ import json
 # Configure the serial port
 # Default UART pins on Raspberry Pi: GPIO14 (TX) and GPIO15 (RX)
 uart = serial.Serial(
-    port='/dev/ttyAMA2',  # Primary UART on Raspberry Pi 4
+    port='/dev/ttyS0',  # Primary UART on Raspberry Pi 4
     baudrate=921600,      # Standard baud rate, adjust if needed
     timeout=1
 )

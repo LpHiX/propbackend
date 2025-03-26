@@ -1,16 +1,41 @@
 {
-    "servoboard": {
-        "serial": "/dev/ttyS0",        
-        "servos": [
-            {"channel": 15, "name":"Servo1"},
-            {"channel": 14, "name":"Servo2"}
-        ],
-        "solenoids": [
-            {"gpio": 40, "name":"LED"},
-            {"gpio": 39, "name":"SrvPower"}
-        ],
-        "pyro": [
-            {"gpio": 30, "name":"Igniter"}
-        ]
-    }
-  }
+    "boards": [
+        {
+            "board_name": "ActuatorBoard",
+            "serial": {
+                "port": "/dev/ttyS0",
+                "baudrate": 921600
+            },
+            "servos": [
+                {
+                    "channel": 15,
+                    "name": "Servo1",
+                    "minangle": 0,
+                    "maxangle": 180
+                },
+                {
+                    "channel": 14,
+                    "name": "Servo2",
+                    "minangle": 0,
+                    "maxangle": 180
+                }
+            ],
+            "solenoids": [
+                {
+                    "gpio": 40,
+                    "name": "LED"
+                },
+                {
+                    "gpio": 39,
+                    "name": "SrvPower"
+                }
+            ],
+            "pyro": [
+                {
+                    "gpio": 30,
+                    "name": "Igniter"
+                }
+            ]
+        }
+    ]
+}
