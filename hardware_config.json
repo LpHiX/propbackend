@@ -1,0 +1,16 @@
+{
+    "servoboard": {
+        "serial": "/dev/ttyS0",        
+        "servos": [
+            {"channel": 15, "name":"Servo1"},
+            {"channel": 14, "name":"Servo2"}
+        ],
+        "solenoids": [
+            {"gpio": 40, "name":"LED"},
+            {"gpio": 39, "name":"SrvPower"}
+        ],
+        "pyro": [
+            {"gpio": 30, "name":"Igniter"}
+        ]
+    }
+  }

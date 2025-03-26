@@ -4,7 +4,7 @@
   "destination": "Servoboard",
   "servos": [
     {"channel": 15, "armed": true, "pwm": 1550, "name":"Servo1"},
-    {"channel": 15, "armed": true, "pwm": 1550, "name":"Servo1"}
+    {"channel": 14, "armed": true, "pwm": 1550, "name":"Servo1"}
   ],
   "solenoids": [
     {"gpio": 40, "armed": true, "powered": false, "name":"LED"},
