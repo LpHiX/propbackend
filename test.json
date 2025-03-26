@@ -1,0 +1,17 @@
+{
+  "timestamp": 0,
+  "source": "RP4",
+  "destination": "Servoboard",
+  "servos": [
+    {"channel": 15, "armed": true, "pwm": 1550, "name":"Servo1"},
+    {"channel": 15, "armed": true, "pwm": 1550, "name":"Servo1"}
+  ],
+  "solenoids": [
+    {"gpio": 40, "armed": true, "powered": false, "name":"LED"},
+    {"gpio": 39, "armed": true, "powered": false, "name":"SrvPower"}
+  ],
+  "pyro": [
+    {"gpio": 30, "armed": false, "powered": true, "timeout": 1000},
+    {"gpio": 31, "armed": false, "powered": true, "timeout": 1000}
+  ]
+}

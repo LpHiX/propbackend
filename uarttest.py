@@ -1,5 +1,6 @@
 import serial
 import time
+import json
 
 # Configure the serial port
 # Default UART pins on Raspberry Pi: GPIO14 (TX) and GPIO15 (RX)
@@ -8,14 +9,13 @@ uart = serial.Serial(
     baudrate=921600,      # Standard baud rate, adjust if needed
     timeout=1
 )
-number = 0
 try:
     print("Starting UART transmission. Press CTRL+C to stop.")
     
     while True:
         # Send "hello world" through UART
-        message = f"123456789 123456789 123456789 123456789 123456789 123456789 123456789 123456789 END {number}\n"
-        number += 1
+        with open('test.json', 'r') as f:
+            message = f.read()
         uart.write(message.encode())
         #print(f"Sent: {message.strip()}")
         
@@ -25,7 +25,7 @@ try:
             print(f"Received: {reply}")
         
         # Wait for 5 seconds
-        time.sleep(0.01)
+        time.sleep(0.05)
         
 except KeyboardInterrupt:
     # Handle graceful exit on CTRL+C

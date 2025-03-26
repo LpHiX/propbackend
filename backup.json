@@ -1,0 +1,17 @@
+{
+    "timestamp": 0,
+    "source": "RP4",
+    "destination": "Servoboard",
+    "servos": [
+      {"channel":  0, "armed": false, "pwm": 1550},
+      {"channel": 15, "armed": false, "pwm": 1550}
+    ],
+    "solenoids": [
+      {"gpio": 15, "armed": false, "powered": true},
+      {"gpio": 15, "armed": false, "powered": true}
+    ],
+    "pyro": [
+      {"gpio": 15, "armed": false, "powered": true, "timeout": 1000},
+      {"gpio": 15, "armed": false, "powered": true, "timeout": 1000}
+    ]
+  }
