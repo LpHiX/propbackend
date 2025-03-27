@@ -9,7 +9,7 @@ import serial
 
 class MachineStates(Enum):
     IDLE = 1
-    FTS = 2
+    ABORT = 2
     HOTFIRE = 3
     LAUNCH = 4
     HOVER = 5
@@ -35,7 +35,8 @@ class SerialManager:
         self.port = port
         self.baudrate = baudrate
         self.running = False
-        self.read_buffer = []
+        self.read_buffer = {}
+        self.send_id = 0
         self.buffer_lock = threading.Lock()
         
         try:
@@ -65,39 +66,61 @@ class SerialManager:
                     if data:
                         print(f"SERIALMANAGER Received: {data}")
                         with self.buffer_lock:
-                            self.read_buffer.append(data)
+                            try:
+                                message_json = json.loads(data)
+                                if "send_id" in message_json:
+                                    self.read_buffer[message_json["send_id"]] = message_json
+                                    cleanup_thread = threading.Timer(1.0, self._readbuffer_cleanup, args=(message_json["send_id"],))
+                                    cleanup_thread.daemon = True
+                                    cleanup_thread.start()
+                            except json.JSONDecodeError:
+                                print(f"SERIALMANAGER JSON Decode error: {data}")
                 time.sleep(0.001)  # Small sleep to prevent CPU hogging
             except Exception as e:
                 print(f"SERIALMANAGER Read error: {e}")
                 time.sleep(0.1)  # Longer sleep on error
 
-    def send(self, message):
+
+    def _readbuffer_cleanup(self, id):
+        """Cleanup read buffer after processing"""
+        with self.buffer_lock:
+            if id in self.read_buffer:
+                del self.read_buffer[id]
+    def send_recieve(self, message_json, sendresponse_lambda):
         """Send message to serial port (non-blocking)"""
         if not self.serial:
             print("SERIALMANAGER Error: Serial port not open")
             return False
-            
         try:
+            message_json["send_id"] = self.send_id
+            message = json.dumps(message_json)
             self.serial.write(message.encode())
             print(f"SERIALMANAGER Sent: {message.strip()}")
+            timeout_time = 1
+            recieve_thread = threading.Thread(target=self._async_recieve, args=(self.send_id, sendresponse_lambda,timeout_time))
+            recieve_thread.daemon = True
+            recieve_thread.start()
+            self.send_id += 1
+
             return True
         except Exception as e:
             print(f"SERIALMANAGER Send error: {e}")
             return False
 
-    def receive(self):
+    def _async_recieve(self, send_id, sendresponse_lambda, timeout_time):
         """Non-blocking receive - returns oldest message or None"""
+        start_time = time.time()
+        while self.read_buffer.get(send_id) is None:
+            if time.time() - start_time > timeout_time:
+                print(f"SERIALMANAGER Timeout waiting for response with send_id {send_id}")
+                sendresponse_lambda(f"SERIALMANAGER Timeout waiting for response with send_id {send_id}")
+                return
+            time.sleep(0.01)
         with self.buffer_lock:
-            if self.read_buffer:
-                return self.read_buffer.pop(0)
+            sendresponse_lambda(json.dumps(self.read_buffer[send_id]))
+            del self.read_buffer[send_id]
+            return
         return None
-    
-    def receive_all(self):
-        """Get all pending messages and clear buffer"""
-        with self.buffer_lock:
-            messages = self.read_buffer.copy()
-            self.read_buffer.clear()
-        return messages
     
     def is_connected(self):
         """Check if serial connection is active"""
@@ -180,10 +203,11 @@ class HardwareHandler:
         """Send a message to a specific board"""
         manager = self.get_serial_manager(board_name)
         if manager:
-            return manager.send(message)
+            manager.send(message)
+            return manager.send_id
         else:
             return f"Board {board_name} not found"
-    def receive(self, board_name):
+    def receive(self, board_name,):
         """Receive a message from a specific board"""
         manager = self.get_serial_manager(board_name)
         if manager:
@@ -191,10 +215,14 @@ class HardwareHandler:
         else:
             return f"Board {board_name} not found"
         
-    def send_recieve(self, board_name, message):
+    def send_recieve(self, board_name, message, sendresponse_lambda):
         """Send a message to a specific board and receive the response"""
-        self.send(board_name, message)
-        return self.receive(board_name)
+        manager = self.get_serial_manager(board_name)
+        if manager:
+            manager.send_recieve(message, sendresponse_lambda)
+        else:
+            print(f"Board {board_name} not found")
+            sendresponse_lambda(f"Board {board_name} not found")
 
 class CommandHandler:
     def __init__(self, state_machine: StateMachine, hardware_handler: HardwareHandler):
@@ -204,40 +232,42 @@ class CommandHandler:
             "get hardware json": self.get_hardware_json,
             "set hardware json": self.set_hardware_json,
             "reload hardware json": self.reload_hardware_json,
-            "send": self.send
+            "send_recieve": self.send_recieve
         }
 
     def process_message(self, command, socket, addr):
         message_json = json.loads(command)
         command = message_json["command"]
         data = message_json["data"]
-        response = f"Unknown command: {command}"
+        sendresponse_lambda = lambda x : socket.sendto(x.encode('utf-8'), addr)
         if command in self.commands:
-            response = self.commands[command](data)
-        socket.sendto(response.encode('utf-8'), addr)
+            self.commands[command](data, sendresponse_lambda)
+        else :
+            sendresponse_lambda(f"Unknown command: {command}")
+            print(f"Unknown command: {command}")
+        
 
-    def get_hardware_json(self, _):
-        return json.dumps(self.hardware_handler.get_config())
+    def get_hardware_json(self, _, sendresponse_lambda):
+        sendresponse_lambda(json.dumps(self.hardware_handler.get_config()))
     
-    def set_hardware_json(self, data):
-        return self.hardware_handler.set_config(data)
+    def set_hardware_json(self, data, sendresponse_lambda):
+        sendresponse_lambda(self.hardware_handler.set_config(data))
 
-    def reload_hardware_json(self, _):
-        return self.hardware_handler.reload_config()
+    def reload_hardware_json(self, _, sendresponse_lambda):
+        sendresponse_lambda(self.hardware_handler.reload_config())
 
-    def send(self, data):
+    def send_recieve(self, data, sendresponse_lambda):
         try:
             board_name = data["board_name"]
-            message = data["message"]
-            response = self.hardware_handler.send_recieve(board_name, json.dumps(message))
-            return response
+            message_json = data["message"]
+            self.hardware_handler.send_recieve(board_name, message_json, sendresponse_lambda)
         except KeyError as e:
             return f"Missing key in data: {e}"  
 
 
 
 class UDPServer:
-    def __init__(self, command_handler, host='0.0.0.0', port=8888):
+    def __init__(self, command_handler: CommandHandler, host='0.0.0.0', port=8888):
         self.command_handler = command_handler
         self.host = host
         self.port = port
@@ -336,7 +366,7 @@ if __name__ == "__main__":
                 # TODO: Implement actual health check
                 pass
 
-            elif current_state == MachineStates.FTS:
+            elif current_state == MachineStates.ABORT:
                 # Flight Termination System - emergency shutdown
                 #print("FTS: Executing emergency shutdown procedures...")
                 # TODO: Implement actual emergency procedures
