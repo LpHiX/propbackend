@@ -192,18 +192,23 @@ class SerialManager:
             self.writer.close()
             print(f"SERIALMANAGER Serial port {self.port} closed")
 
+class Board:
+    def __init__(self, name, serialmanager: SerialManager, state):
+        self.name = name
+        self.serialmanager = serialmanager
+        self.state = state
+
 class HardwareHandler:
     def __init__(self, emulator=False, debug_prints=False):
         self.emulator = emulator
         self.debug_prints = debug_prints
-        self.serial_managers = {}
+        self.boards = []
 
         with open('hardware_config.json', 'r') as file:
             self.config = json.load(file)
         with open('hardware_config.json', 'w') as file:
                 json.dump(self.config, file, indent=4)
-
-        
+     
     async def initialize(self):
         """Initialize all hardware asynchronously"""
         return await self.load_hardware()
@@ -214,43 +219,83 @@ class HardwareHandler:
             for board in self.config['boards']:
                 board_name = board['board_name']
                 serial_config = board['serial']
-                
+
+                serial_manager = None
+                state = {"updated": False}
+
                 if 'port' in serial_config and 'baudrate' in serial_config:
                     try:
-                        manager = SerialManager(
+                        serial_manager = SerialManager(
                             port=serial_config['port'],
                             baudrate=serial_config['baudrate'],
                             print_send=self.debug_prints,
                             print_receive=self.debug_prints,
                             emulator=self.emulator
                         )
-                        if await manager.initialize():                        
-                            self.serial_managers[board_name] = manager
+                        if await serial_manager.initialize():                        
                             print(f"Initialized serial connection for board: {board_name}")
                     except Exception as e:
                         print(f"Failed to initialize serial for board {board_name}: {e}")
                 else:
                     print(f"Board {board_name} is missing port or baudrate configuration")
+                if 'servos' in board:
+                    state['servos'] = {}
+                    for servo_name, servo_data in board['servos'].items():
+                        state['servos'][servo_name] = {"angle": 0, **servo_data}
+                        
+                if 'solenoids' in board:
+                    state['solenoids'] = {}
+                    for solenoid_name, solenoid_data in board['solenoids'].items():
+                        state['solenoids'][solenoid_name] = {
+                            "armed": False, 
+                            "powered": False,
+                            **solenoid_data
+                        }
+                        
+                if 'pyros' in board:
+                    state['pyros'] = {}
+                    for pyro_name, pyro_data in board['pyros'].items():
+                        state['pyros'][pyro_name] = {
+                            "armed": False, 
+                            "powered": False,
+                            **pyro_data
+                        }
+
+                self.boards.append(Board(board_name, serial_manager, state))
         else:
             print("No boards found in configuration or invalid board configuration")
+    
+    def update_board_state(self, board_name, new_state):
+        if board_name in self.config['boards']:
+            board = self.boards[board_name]
+        else:
+            print(f"Board {board_name} not found in configuration")
+            return
+        
+        hardware_types = ['servos', 'solenoids', 'pyros', 'pt', 'tc', 'lc', 'imu', 'gps', 'mag', 'baro', 'encoder']
+
+        for hw_type in hardware_types:
+            if hw_type in new_state and hw_type in board.state:
+                for item_name, item_data in new_state[hw_type].items():
+                    if item_name in board.state[hw_type]:
+                        for key, value in item_data.items():
+                            board.state[hw_type][item_name][key] = value
 
     def unload_hardware(self):
         # Close all serial connections
-        for board_name, manager in self.serial_managers.items():
-            manager.close()
-            print(f"Closed serial connection for board: {board_name}")
-        self.serial_managers.clear()
+        for board in self.boards:
+            if board.serialmanager:
+                board.serialmanager.close()
+                print(f"Closed serial connection for board: {board.name}")
+        self.boards = []
 
-    def get_serial_manager(self, board_name) -> SerialManager:
-        """Get the serial manager for a specific board"""
-        return self.serial_managers.get(board_name, None)
 
     def get_config(self):
         """Return the hardware configuration"""
         return self.config
     
     def set_config(self, data):
-        """Set the hardware configuration"""
+        """Set the hardware configuration without reloading board connections"""
         try:
             self.config = json.loads(data)
             with open('hardware_config.json', 'w') as file:
@@ -464,18 +509,16 @@ if __name__ == "__main__":
         print("Running on Windows - standard event loop will be used and using serial emulator")
         asyncio.run(main(emulator=True))
     
-    
-
 '''
 TODO
-- Look at asyncio
 - Current state of each hardware component
 - Logging of each state to a csv file (Ability to name it after a test)
 - Auto starting and auto requesting of data
-- Only send json through if it exists in the hardware configuration, unless unsafe=true
+
 - UDP and serial json logging
 Lower priority
 - only send actuator commands if deployment power is on
+- Only send json through if it exists in the hardware configuration, unless unsafe=true
 
 
 - hardware json to gui

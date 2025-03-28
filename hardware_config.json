@@ -6,36 +6,45 @@
                 "port": "/dev/ttyS0",
                 "baudrate": 921600
             },
-            "servos": [
-                {
+            "servos": {
+                "Fuel Main": {
                     "channel": 15,
-                    "name": "Servo1",
                     "minangle": 0,
                     "maxangle": 180
                 },
-                {
+                "Ox Main": {
                     "channel": 14,
-                    "name": "Servo2",
                     "minangle": 0,
                     "maxangle": 180
                 }
-            ],
-            "solenoids": [
-                {
-                    "gpio": 40,
-                    "name": "LED"
+            },
+            "solenoids": {
+                "LED": {
+                    "gpio": 40
                 },
-                {
-                    "gpio": 39,
-                    "name": "SrvPower"
+                "SrvPower": {
+                    "gpio": 39
                 }
-            ],
-            "pyro": [
-                {
-                    "gpio": 30,
-                    "name": "Igniter"
+            },
+            "pyros": {
+                "Igniter": {
+                    "gpio": 30
                 }
-            ]
+            }
+        },
+        {
+            "board_name": "Sensorboard0",
+            "serial": {
+                "port": "/dev/ttyS1",
+                "baudrate": 921600
+            },
+            "pts": {
+                "Ox Inj": {
+                    "raw": 0,
+                    "gain": 1,
+                    "offset": 0
+                }
+            }
         }
     ]
 }
