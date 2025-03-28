@@ -44,6 +44,14 @@ class SerialManager:
         self.send_id = 0
         self.send_id_lock = threading.Lock()
 
+        self.cleanup_queue = []  # Will store (timestamp, id) tuples
+        self.cleanup_lock = threading.Lock()
+        
+        # Single cleanup thread
+        self.cleanup_thread = threading.Thread(target=self._cleanup_scheduler_loop)
+        self.cleanup_thread.daemon = True
+        self.cleanup_thread.start()
+
         
         try:
             self.serial = serial.Serial(
@@ -60,7 +68,7 @@ class SerialManager:
             self.read_thread.start()
 
             self.thread_pool = ThreadPoolExecutor(max_workers=100)
-            self.thread_pool2 = ThreadPoolExecutor(max_workers=100)
+            
             
         except serial.SerialException as e:
             print(f"SERIALMANAGER Error opening port {self.port}: {e}")
@@ -80,7 +88,9 @@ class SerialManager:
                             if "send_id" in message_json:
                                 with self.buffer_lock:
                                     self.read_buffer[message_json["send_id"]] = message_json
-                                self.thread_pool2.submit(lambda id=message_json["send_id"]: (time.sleep(1.0), self._readbuffer_cleanup(id)))
+                                cleanup_time = time.time() + 1.0  # 1 second timeout
+                                with self.cleanup_lock:
+                                    self.cleanup_queue.append((cleanup_time, message_json["send_id"]))
                         except json.JSONDecodeError:
                             print(f"SERIALMANAGER JSON Decode error: {data}")
                 time.sleep(0.001)  # Small sleep to prevent CPU hogging
@@ -88,13 +98,34 @@ class SerialManager:
                 print(f"SERIALMANAGER Read error: {e}")
                 time.sleep(0.1)  # Longer sleep on error
 
+    def _readbuffer_cleanloop(self):
+        while self.running:
+            try:
+                next_cleanup_time = None
+                cleanup_id = None
+                
+                with self.cleanup_lock:
+                    if self.cleanup_queue:
+                        self.cleanup_queue.sort()
+                        now = time.time()   
 
-    def _readbuffer_cleanup(self, id):
-        """Cleanup read buffer after processing"""
-        with self.buffer_lock:
-            if id in self.read_buffer:
-                print("Packet lost to UDP")
-                del self.read_buffer[id]
+                        while self.cleanup_queue and self.cleanup_queue[0][0] < now:
+                            _, cleanup_id = self.cleanup_queue.pop(0)
+                            with self.buffer_lock:
+                                if cleanup_id in self.read_buffer:
+                                    print("SERIALMANAGER Cleanup: Removing message with send_id", cleanup_id)
+                                    del self.read_buffer[cleanup_id]
+                        
+                        if self.cleanup_queue:
+                            next_cleanup_time = self.cleanup_queue[0][0]
+                if next_cleanup_time is not None:
+                    time.sleep(max(0.1, next_cleanup_time - time.time()))
+                else:
+                    time.sleep(0.1)
+            except Exception as e:
+                print(f"SERIALMANAGER Cleanup error: {e}")
+                time.sleep(0.1)
+
     def send_receive(self, message_json, sendresponse_lambda):
         """Send message to serial port (non-blocking)"""
         if not self.serial:
@@ -102,14 +133,15 @@ class SerialManager:
             return False
         try:
             with self.send_id_lock:
-                message_json["send_id"] = self.send_id
+                send_id = self.send_id
+                self.send_id += 1
+            message_json["send_id"] = send_id
             message = json.dumps(message_json)
             self.serial.write(message.encode())
             if self.print_send:
                 print(f"SERIALMANAGER Sent: {message.strip()}")
             timeout_time = 1
-            self.thread_pool.submit(self._async_receive, self.send_id, sendresponse_lambda, timeout_time)
-            self.send_id += 1
+            self.thread_pool.submit(self._async_receive, send_id, sendresponse_lambda, timeout_time)
 
             return True
         except Exception as e:
@@ -130,7 +162,7 @@ class SerialManager:
             del self.read_buffer[send_id]
             return
         return None
-    
+
     def is_connected(self):
         """Check if serial connection is active"""
         return self.serial is not None and self.serial.is_open
@@ -140,7 +172,6 @@ class SerialManager:
         self.running = False
         time.sleep(0.1)  # Give read thread time to exit
         self.thread_pool.shutdown()
-        self.thread_pool2.shutdown()
         if self.serial and self.serial.is_open:
             self.serial.close()
             print(f"SERIALMANAGER Serial port {self.port} closed")
@@ -393,4 +424,20 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         signal_handler.handle_signal(signal.SIGINT, None)
-        
+
+'''
+TODO
+- Look at asyncio
+- Current state of each hardware component
+- Logging of each state to a csv file (Ability to name it after a test)
+- Auto starting and auto requesting of data
+- Only send json through if it exists in the hardware configuration, unless unsafe=true
+- UDP and serial json logging
+Lower priority
+- only send actuator commands if deployment power is on
+
+
+- hardware json to gui
+
+'''
+
