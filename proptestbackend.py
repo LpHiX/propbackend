@@ -33,12 +33,12 @@ class StateMachine:
         return f"Current State: {self.state.name}"
 
 class SerialManager:
-    def __init__(self, port, baudrate, print_send=False, print_recieve=False, emulator=False):
+    def __init__(self, port, baudrate, print_send=False, print_receive=False, emulator=False):
         self.emulator = emulator
         self.port = port
         self.baudrate = baudrate
         self.print_send = print_send
-        self.print_recieve = print_recieve
+        self.print_receive = print_receive
         self.running = False
 
         self.read_buffer = {}
@@ -91,7 +91,7 @@ class SerialManager:
                 if line:
                     data = line.decode('utf-8').strip()
                     if data:
-                        if self.print_recieve:
+                        if self.print_receive:
                             print(f"SERIALMANAGER Received: {data}")
                         try:
                             message_json = json.loads(data)
@@ -192,7 +192,6 @@ class SerialManager:
             self.writer.close()
             print(f"SERIALMANAGER Serial port {self.port} closed")
 
-
 class HardwareHandler:
     def __init__(self, emulator=False):
         self.emulator = emulator
@@ -257,10 +256,10 @@ class HardwareHandler:
         except json.JSONDecodeError:
             return "Invalid JSON format"
         
-    def reload_config(self):
+    async def reload_config(self):
         """Reload the hardware configuration from a file"""
         self.unload_hardware()  # Unload current hardware configuration
-        self.load_hardware()
+        await self.load_hardware()
         return "Hardware configuration reloaded successfully"
         
     def send_receive(self, board_name, message, sendresponse_lambda):
@@ -280,7 +279,9 @@ class CommandHandler:
             "get hardware json": self.get_hardware_json,
             "set hardware json": self.set_hardware_json,
             "reload hardware json": self.reload_hardware_json,
-            "send_receive": self.send_receive
+            "send_receive": self.send_receive,
+            "set state": self.state_machine.set_state,
+            "get state": self.state_machine.get_state,
         }
 
     def process_message(self, command, socket, addr):
@@ -290,7 +291,7 @@ class CommandHandler:
         sendresponse_lambda = lambda x : socket.sendto(x.encode('utf-8'), addr)
         if command in self.commands:
             self.commands[command](data, sendresponse_lambda)
-        else :
+        else:
             sendresponse_lambda(f"Unknown command: {command}")
             print(f"Unknown command: {command}")
         
@@ -301,8 +302,8 @@ class CommandHandler:
     def set_hardware_json(self, data, sendresponse_lambda):
         sendresponse_lambda(self.hardware_handler.set_config(data))
 
-    def reload_hardware_json(self, _, sendresponse_lambda):
-        sendresponse_lambda(self.hardware_handler.reload_config())
+    async def reload_hardware_json(self, _, sendresponse_lambda):
+        sendresponse_lambda(await self.hardware_handler.reload_config())
 
     def send_receive(self, data, sendresponse_lambda):
         try:
@@ -310,19 +311,16 @@ class CommandHandler:
             message_json = data["message"]
             self.hardware_handler.send_receive(board_name, message_json, sendresponse_lambda)
         except KeyError as e:
-            return f"Missing key in data: {e}"  
-
-
+            sendresponse_lambda(f"Missing key in data: {e}")
 
 class UDPServer:
-    def __init__(self, command_handler: CommandHandler, host='0.0.0.0', port=8888, print_send=False, print_recieve=False):
+    def __init__(self, command_handler: CommandHandler, host='0.0.0.0', port=8888, print_send=False, print_receive=False):
         self.command_handler = command_handler
         self.host = host
         self.port = port
         self.print_send = print_send
-        self.print_recieve = print_recieve
+        self.print_receive = print_receive
 
-        self.running = False
         self.transport = None
         self.protocol = None
 
@@ -342,7 +340,7 @@ class UDPServer:
                 
             def datagram_received(self, data, addr):
                 message = data.decode('utf-8').strip()
-                if self.server.print_recieve:
+                if self.server.print_receive:
                     print(f"UDP Received: '{message}' from {addr}")
                 
                 # Process the message
@@ -357,23 +355,12 @@ class UDPServer:
             lambda: UDPServerProtocol(self),
             local_addr=(self.host, self.port)
         )
-        # while self.running:
-        #     try:
-        #         data, addr = self.socket.recvfrom(1024)
-        #         message = data.decode('utf-8').strip()
-        #         if self.print_recieve:
-        #             print(f"UDP Received: '{message}' from {addr}")
-        #         self.command_handler.process_message(message, self.socket, addr)
-        #     except Exception as e:
-        #         if self.running:
-        #             print(f"UDP Error: {e}")
     
     def stop(self):
         """Stop the server"""
         if self.transport:
             self.transport.close()
         print("UDP Server stopped")
-
 
 class SignalHandler:
     def __init__(self, udp_server, emulator=False):
@@ -397,23 +384,24 @@ class SignalHandler:
         os.kill(os.getpid(), signal.SIGTSTP)
 
 class TimeKeeper:
-    def __init__(self, cycle_time=0.01):
+    def __init__(self, cycle_time=0.01, debug_time=0.0):
+        self.debug_time = debug_time
         self.cycle_time = cycle_time
         self.start_time = time.perf_counter()
         self.cycle = 0
 
     def cycle_start(self):
         self.cycle_starttime = time.perf_counter()
+        if self.debug_time > 0:
+            if(self.cycle % (self.debug_time / self.cycle_time) == 0):
+                print(f"Cycle {self.cycle} started at {time.perf_counter() - self.start_time:.5f} seconds")
         
 
     async def cycle_end(self):
         self.cycle += 1
-        elapsed = time.perf_counter() - self.cycle_starttime
-        sleep_time = max(0, self.cycle_time - elapsed)
-        if sleep_time > 0:
-            await asyncio.sleep(sleep_time)
-        else:
-            await asyncio.sleep(0) #To yield to event loop briefly
+        next_time = self.start_time + (self.cycle + 1) * self.cycle_time
+        await asyncio.sleep(max(0, next_time - time.perf_counter()))  # Sleep for the remaining cycle time
+
 
     def get_cycle(self):
         return self.cycle
@@ -431,7 +419,7 @@ async def main(emulator=False):
     signal_handler = SignalHandler(udp_server, emulator) #To handle system interrupts
     
     print("Startup Complete, waiting for commands")
-    time_keeper = TimeKeeper(cycle_time = 0.01)
+    time_keeper = TimeKeeper(cycle_time = 0.01, debug_time = 0.0)
 
     try:
         while True:
