@@ -1,13 +1,13 @@
 from enum import Enum
 import json
-import socket
-import threading
 import time
 import signal
 import sys
 import serial
+import asyncio
+import serial_asyncio
 import os
-from concurrent.futures import ThreadPoolExecutor
+import platform
 
 class MachineStates(Enum):
     IDLE = 1
@@ -33,84 +33,94 @@ class StateMachine:
         return f"Current State: {self.state.name}"
 
 class SerialManager:
-    def __init__(self, port, baudrate, print_send=False, print_recieve=False):
+    def __init__(self, port, baudrate, print_send=False, print_recieve=False, emulator=False):
+        self.emulator = emulator
         self.port = port
         self.baudrate = baudrate
         self.print_send = print_send
         self.print_recieve = print_recieve
         self.running = False
+
         self.read_buffer = {}
-        self.buffer_lock = threading.Lock()
+        self.buffer_lock = asyncio.Lock()
         self.send_id = 0
-        self.send_id_lock = threading.Lock()
+        self.send_id_lock = asyncio.Lock()
 
         self.cleanup_queue = []  # Will store (timestamp, id) tuples
-        self.cleanup_lock = threading.Lock()
-        
-        # Single cleanup thread
-        self.cleanup_thread = threading.Thread(target=self._cleanup_scheduler_loop)
-        self.cleanup_thread.daemon = True
-        self.cleanup_thread.start()
+        self.cleanup_lock = asyncio.Lock()
 
+        self.reader = None
+        self.writer = None
+        self.loop = asyncio.get_event_loop()
+
+    async def initialize(self):
+        """Initialize the serial connection"""
+        if self.emulator:
+            print("SERIALMANAGER Emulator mode - no serial connection")
+            return None
         
+        return await self._initialize_serial()
+
+    async def _initialize_serial(self):
         try:
-            self.serial = serial.Serial(
-                port=self.port,
-                baudrate=self.baudrate,
-                timeout=0.1  # Short timeout to make reads non-blocking
+            self.reader, self.writer = await serial_asyncio.open_serial_connection(
+                url=self.port,
+                baudrate=self.baudrate
             )
             print(f"SERIALMANAGER Serial port {self.port} opened at {self.baudrate} baud")
             
             # Start the background reading thread
             self.running = True
-            self.read_thread = threading.Thread(target=self._read_loop)
-            self.read_thread.daemon = True
-            self.read_thread.start()
 
-            
+            self.read_task = self.loop.create_task(self._read_loop())
+            self.cleanup_task = self.loop.create_task(self._readbuffer_cleanloop())
+
+            return True
             
         except serial.SerialException as e:
             print(f"SERIALMANAGER Error opening port {self.port}: {e}")
-            self.serial = None
+            self.reader = None
+            self.writer = None
+            return False
 
-    def _read_loop(self):
+    async def _read_loop(self):
         """Background thread that continuously reads from serial port"""
         while self.running:
             try:
-                if self.serial and self.serial.in_waiting > 0:
-                    data = self.serial.readline().decode('utf-8').strip()
+                line = await self.reader.readline()
+                if line:
+                    data = line.decode('utf-8').strip()
                     if data:
                         if self.print_recieve:
                             print(f"SERIALMANAGER Received: {data}")
                         try:
                             message_json = json.loads(data)
                             if "send_id" in message_json:
-                                with self.buffer_lock:
+                                async with self.buffer_lock:
                                     self.read_buffer[message_json["send_id"]] = message_json
-                                cleanup_time = time.time() + 1.0  # 1 second timeout
-                                with self.cleanup_lock:
+                                cleanup_time = time.perf_counter() + 1.0  # 1 second timeout
+                                async with self.cleanup_lock:
                                     self.cleanup_queue.append((cleanup_time, message_json["send_id"]))
                         except json.JSONDecodeError:
                             print(f"SERIALMANAGER JSON Decode error: {data}")
-                time.sleep(0.001)  # Small sleep to prevent CPU hogging
             except Exception as e:
                 print(f"SERIALMANAGER Read error: {e}")
-                time.sleep(0.1)  # Longer sleep on error
+                await asyncio.sleep(0.1)  # Longer sleep on error
 
-    def _readbuffer_cleanloop(self):
+    async def _readbuffer_cleanloop(self):
         while self.running:
             try:
                 next_cleanup_time = None
                 cleanup_id = None
                 
-                with self.cleanup_lock:
+                async with self.cleanup_lock:
                     if self.cleanup_queue:
                         self.cleanup_queue.sort()
-                        now = time.time()   
+                        now = time.perf_counter()   
 
                         while self.cleanup_queue and self.cleanup_queue[0][0] < now:
                             _, cleanup_id = self.cleanup_queue.pop(0)
-                            with self.buffer_lock:
+                            async with self.buffer_lock:
                                 if cleanup_id in self.read_buffer:
                                     print("SERIALMANAGER Cleanup: Removing message with send_id", cleanup_id)
                                     del self.read_buffer[cleanup_id]
@@ -118,67 +128,74 @@ class SerialManager:
                         if self.cleanup_queue:
                             next_cleanup_time = self.cleanup_queue[0][0]
                 if next_cleanup_time is not None:
-                    time.sleep(max(0.1, next_cleanup_time - time.time()))
+                    await asyncio.sleep(max(0.1, next_cleanup_time - time.perf_counter()))
                 else:
-                    time.sleep(0.1)
+                    await asyncio.sleep(0.1)
             except Exception as e:
                 print(f"SERIALMANAGER Cleanup error: {e}")
-                time.sleep(0.1)
+                await asyncio.sleep(0.1)
 
     def send_receive(self, message_json, sendresponse_lambda):
         """Send message to serial port (non-blocking)"""
-        if not self.serial:
+        if not self.writer:
             print("SERIALMANAGER Error: Serial port not open")
-            return False
+        
+        self.loop.create_task(self._async_send_receive(message_json, sendresponse_lambda))
+        
+    async def _async_send_receive(self, message_json, sendresponse_lambda):
         try:
-            with self.send_id_lock:
+            async with self.send_id_lock:
                 send_id = self.send_id
                 self.send_id += 1
             message_json["send_id"] = send_id
             message = json.dumps(message_json)
-            self.serial.write(message.encode())
+
+            self.writer.write(message.encode())
+            await self.writer.drain()
+
             if self.print_send:
                 print(f"SERIALMANAGER Sent: {message.strip()}")
-            timeout_time = 1
-            thread = threading.Thread(target=self._async_receive, args=(send_id, sendresponse_lambda, timeout_time))
-            thread.daemon = True  # Daemonize thread to exit with main program
-            thread.start()
 
-            return True
+            start_time = time.perf_counter()
+            timeout_time = 1.0  # 1 second timeout
+            while True:
+                async with self.buffer_lock:
+                    if send_id in self.read_buffer:
+                        response = json.dumps(self.read_buffer[send_id])
+                        sendresponse_lambda(response)
+                        del self.read_buffer[send_id]
+                        return
+                if time.perf_counter() - start_time > timeout_time:
+                    print(f"SERIALMANAGER Timeout waiting for response with send_id {send_id}")
+                    sendresponse_lambda(f"SERIALMANAGER Timeout waiting for response with send_id {send_id}")
+                    return
+                await asyncio.sleep(0.001)
         except Exception as e:
             print(f"SERIALMANAGER Send error: {e}")
-            return False
-
-    def _async_receive(self, send_id, sendresponse_lambda, timeout_time):
-        """Non-blocking receive - returns oldest message or None"""
-        start_time = time.time()
-        while self.read_buffer.get(send_id) is None:
-            if time.time() - start_time > timeout_time:
-                print(f"SERIALMANAGER Timeout waiting for response with send_id {send_id}")
-                sendresponse_lambda(f"SERIALMANAGER Timeout waiting for response with send_id {send_id}")
-                return
-            time.sleep(0.01)
-        with self.buffer_lock:
-            sendresponse_lambda(json.dumps(self.read_buffer[send_id]))
-            del self.read_buffer[send_id]
+            sendresponse_lambda(f"SERIALMANAGER Send error: {e}")
             return
-        return None
 
     def is_connected(self):
         """Check if serial connection is active"""
-        return self.serial is not None and self.serial.is_open
+        return self.reader is not None and self.writer is not None
         
     def close(self):
         """Close the serial connection gracefully"""
         self.running = False
-        time.sleep(0.1)  # Give read thread time to exit
-        if self.serial and self.serial.is_open:
-            self.serial.close()
+
+        if hasattr(self, 'read_task'):
+            self.read_task.cancel()
+        if hasattr(self, 'cleanup_task'):
+            self.cleanup_task.cancel()
+
+        if self.writer:
+            self.writer.close()
             print(f"SERIALMANAGER Serial port {self.port} closed")
 
 
 class HardwareHandler:
-    def __init__(self):
+    def __init__(self, emulator=False):
+        self.emulator = emulator
         self.serial_managers = {}
 
         with open('hardware_config.json', 'r') as file:
@@ -187,9 +204,11 @@ class HardwareHandler:
                 json.dump(self.config, file, indent=4)
 
         
-        self.load_hardware()
+    async def initialize(self):
+        """Initialize all hardware asynchronously"""
+        return await self.load_hardware()
     
-    def load_hardware(self):
+    async def load_hardware(self):
         # Initialize serial managers for each board in the configuration
         if 'boards' in self.config:
             for board in self.config['boards']:
@@ -198,11 +217,14 @@ class HardwareHandler:
                 
                 if 'port' in serial_config and 'baudrate' in serial_config:
                     try:
-                        self.serial_managers[board_name] = SerialManager(
+                        manager = SerialManager(
                             port=serial_config['port'],
-                            baudrate=serial_config['baudrate']
+                            baudrate=serial_config['baudrate'],
+                            emulator=self.emulator
                         )
-                        print(f"Initialized serial connection for board: {board_name}")
+                        if await manager.initialize():                        
+                            self.serial_managers[board_name] = manager
+                            print(f"Initialized serial connection for board: {board_name}")
                     except Exception as e:
                         print(f"Failed to initialize serial for board {board_name}: {e}")
                 else:
@@ -299,41 +321,67 @@ class UDPServer:
         self.port = port
         self.print_send = print_send
         self.print_recieve = print_recieve
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.running = True
-        self.socket.bind((self.host, self.port))
-        self.server_thread = threading.Thread(target=self._server_loop)
-        self.server_thread.daemon = True # Thread will exit with main program exits
-        self.server_thread.start()
+
+        self.running = False
+        self.transport = None
+        self.protocol = None
+
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._start_server())
 
         print(f"UDP server listening on {self.host}:{self.port}")
 
-    def _server_loop(self):
-        """Main server loop running in a separate thread"""
-        while self.running:
-            try:
-                data, addr = self.socket.recvfrom(1024)
+    async def _start_server(self):
+        """Start the UDP server using asyncio"""
+        class UDPServerProtocol(asyncio.DatagramProtocol):
+            def __init__(self, server):
+                self.server = server
+                
+            def connection_made(self, transport):
+                self.server.transport = transport
+                
+            def datagram_received(self, data, addr):
                 message = data.decode('utf-8').strip()
-                if self.print_recieve:
+                if self.server.print_recieve:
                     print(f"UDP Received: '{message}' from {addr}")
-                self.command_handler.process_message(message, self.socket, addr)
-            except Exception as e:
-                if self.running:
-                    print(f"UDP Error: {e}")
+                
+                # Process the message
+                self.server.command_handler.process_message(
+                    message, 
+                    lambda x: self.server.transport.sendto(x.encode('utf-8'), addr),
+                    addr
+                )
+        
+        loop = asyncio.get_event_loop()
+        self.transport, self.protocol = await loop.create_datagram_endpoint(
+            lambda: UDPServerProtocol(self),
+            local_addr=(self.host, self.port)
+        )
+        # while self.running:
+        #     try:
+        #         data, addr = self.socket.recvfrom(1024)
+        #         message = data.decode('utf-8').strip()
+        #         if self.print_recieve:
+        #             print(f"UDP Received: '{message}' from {addr}")
+        #         self.command_handler.process_message(message, self.socket, addr)
+        #     except Exception as e:
+        #         if self.running:
+        #             print(f"UDP Error: {e}")
     
     def stop(self):
         """Stop the server"""
-        self.running = False
-        self.socket.close()
+        if self.transport:
+            self.transport.close()
         print("UDP Server stopped")
 
 
 class SignalHandler:
-    def __init__(self, udp_server):
+    def __init__(self, udp_server, emulator=False):
         self.udp_server = udp_server
         signal.signal(signal.SIGINT, self.handle_signal)  # Handle Ctrl+C
         signal.signal(signal.SIGTERM, self.handle_signal)  # Handle termination
-        signal.signal(signal.SIGTSTP, self.handle_suspend)
+        if(not emulator):
+            signal.signal(signal.SIGTSTP, self.handle_suspend)
 
     def handle_signal(self, signum, frame):
         print(f"Received signal {signum}, stopping server...")
@@ -351,33 +399,36 @@ class SignalHandler:
 class TimeKeeper:
     def __init__(self, cycle_time=0.01):
         self.cycle_time = cycle_time
-        self.start_time = time.time()
+        self.start_time = time.perf_counter()
         self.cycle = 0
 
     def cycle_start(self):
-        self.cycle_starttime = time.time()
+        self.cycle_starttime = time.perf_counter()
         
 
-    def cycle_end(self):
+    async def cycle_end(self):
         self.cycle += 1
-        elapsed = time.time() - self.cycle_starttime
+        elapsed = time.perf_counter() - self.cycle_starttime
         sleep_time = max(0, self.cycle_time - elapsed)
         if sleep_time > 0:
-            time.sleep(sleep_time)
+            await asyncio.sleep(sleep_time)
+        else:
+            await asyncio.sleep(0) #To yield to event loop briefly
 
     def get_cycle(self):
         return self.cycle
 
-
-
-if __name__ == "__main__":
+async def main(emulator=False):
     deployment_power = False
 
     state_machine = StateMachine()
-    hardware_handler = HardwareHandler()
+
+    hardware_handler = HardwareHandler(emulator=emulator)
+    await hardware_handler.initialize()
+
     command_handler = CommandHandler(state_machine, hardware_handler)
     udp_server = UDPServer(command_handler)
-    signal_handler = SignalHandler(udp_server) #To handle system interrupts
+    signal_handler = SignalHandler(udp_server, emulator) #To handle system interrupts
     
     print("Startup Complete, waiting for commands")
     time_keeper = TimeKeeper(cycle_time = 0.01)
@@ -390,40 +441,41 @@ if __name__ == "__main__":
             
             # Perform actions based on current state
             if current_state == MachineStates.IDLE:
-                # In IDLE state, just periodic system checks
-                #print("IDLE: Performing system health check...")
-                # TODO: Implement actual health check
                 pass
 
             elif current_state == MachineStates.ABORT:
-                # Flight Termination System - emergency shutdown
-                #print("FTS: Executing emergency shutdown procedures...")
-                # TODO: Implement actual emergency procedures
                 pass
 
             elif current_state == MachineStates.HOTFIRE:
-                # Hot fire test mode
-                #print("HOTFIRE: Monitoring engine parameters...")
-                # TODO: Implement engine monitoring and control
                 pass
                 
             elif current_state == MachineStates.LAUNCH:
-                # Launch sequence
-                #print("LAUNCH: Monitoring launch parameters...")
-                # TODO: Implement launch sequence monitoring
                 pass
 
             elif current_state == MachineStates.HOVER:
-                # Hover control mode
-                #print("HOVER: Running stabilization routines...")
-                # TODO: Implement hover control algorithms
                 pass
             
             # Sleep to avoid excessive CPU usage
-            time_keeper.cycle_end()
+            await time_keeper.cycle_end()
 
     except KeyboardInterrupt:
         signal_handler.handle_signal(signal.SIGINT, None)
+
+if __name__ == "__main__":
+    print("=====================Starting backend...======================")
+    if platform.system() != "Windows":
+        try:
+            import uvloop
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+            print("Using uvloop for enhanced performance")
+        except ImportError:
+            print("uvloop not available. Run: pip install uvloop for better performance")
+        asyncio.run(main())
+    else:
+        print("Running on Windows - standard event loop will be used and using serial emulator")
+        asyncio.run(main(emulator=True))
+    
+    
 
 '''
 TODO
