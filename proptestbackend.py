@@ -193,8 +193,9 @@ class SerialManager:
             print(f"SERIALMANAGER Serial port {self.port} closed")
 
 class HardwareHandler:
-    def __init__(self, emulator=False):
+    def __init__(self, emulator=False, debug_prints=False):
         self.emulator = emulator
+        self.debug_prints = debug_prints
         self.serial_managers = {}
 
         with open('hardware_config.json', 'r') as file:
@@ -219,6 +220,8 @@ class HardwareHandler:
                         manager = SerialManager(
                             port=serial_config['port'],
                             baudrate=serial_config['baudrate'],
+                            print_send=self.debug_prints,
+                            print_receive=self.debug_prints,
                             emulator=self.emulator
                         )
                         if await manager.initialize():                        
@@ -284,11 +287,10 @@ class CommandHandler:
             "get state": self.state_machine.get_state,
         }
 
-    def process_message(self, command, socket, addr):
+    def process_message(self, command, sendresponse_lambda):
         message_json = json.loads(command)
         command = message_json["command"]
         data = message_json["data"]
-        sendresponse_lambda = lambda x : socket.sendto(x.encode('utf-8'), addr)
         if command in self.commands:
             self.commands[command](data, sendresponse_lambda)
         else:
@@ -332,7 +334,7 @@ class UDPServer:
     async def _start_server(self):
         """Start the UDP server using asyncio"""
         class UDPServerProtocol(asyncio.DatagramProtocol):
-            def __init__(self, server):
+            def __init__(self, server: UDPServer):
                 self.server = server
                 
             def connection_made(self, transport):
@@ -346,8 +348,7 @@ class UDPServer:
                 # Process the message
                 self.server.command_handler.process_message(
                     message, 
-                    lambda x: self.server.transport.sendto(x.encode('utf-8'), addr),
-                    addr
+                    lambda x: self.server.transport.sendto(x.encode('utf-8'), addr)
                 )
         
         loop = asyncio.get_event_loop()
@@ -411,15 +412,15 @@ async def main(emulator=False):
 
     state_machine = StateMachine()
 
-    hardware_handler = HardwareHandler(emulator=emulator)
+    hardware_handler = HardwareHandler(emulator=emulator, debug_prints=False)
     await hardware_handler.initialize()
 
     command_handler = CommandHandler(state_machine, hardware_handler)
-    udp_server = UDPServer(command_handler)
+    udp_server = UDPServer(command_handler, print_send=False, print_receive=False)
     signal_handler = SignalHandler(udp_server, emulator) #To handle system interrupts
     
     print("Startup Complete, waiting for commands")
-    time_keeper = TimeKeeper(cycle_time = 0.01, debug_time = 0.0)
+    time_keeper = TimeKeeper(cycle_time = 0.01, debug_time = 1.0)
 
     try:
         while True:
