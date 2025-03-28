@@ -67,7 +67,6 @@ class SerialManager:
             self.read_thread.daemon = True
             self.read_thread.start()
 
-            self.thread_pool = ThreadPoolExecutor(max_workers=100)
             
             
         except serial.SerialException as e:
@@ -141,7 +140,9 @@ class SerialManager:
             if self.print_send:
                 print(f"SERIALMANAGER Sent: {message.strip()}")
             timeout_time = 1
-            self.thread_pool.submit(self._async_receive, send_id, sendresponse_lambda, timeout_time)
+            thread = threading.Thread(target=self._async_receive, args=(send_id, sendresponse_lambda, timeout_time))
+            thread.daemon = True  # Daemonize thread to exit with main program
+            thread.start()
 
             return True
         except Exception as e:
@@ -171,7 +172,6 @@ class SerialManager:
         """Close the serial connection gracefully"""
         self.running = False
         time.sleep(0.1)  # Give read thread time to exit
-        self.thread_pool.shutdown()
         if self.serial and self.serial.is_open:
             self.serial.close()
             print(f"SERIALMANAGER Serial port {self.port} closed")
