@@ -18,6 +18,11 @@
                     "minangle": 0,
                     "maxangle": 180,
                     "safe_angle": 0
+                },
+                "Ox Vent": {
+                    "channel": 15,
+                    "minangle": 0,
+                    "maxangle": 180
                 }
             },
             "solenoids": {

@@ -88,21 +88,28 @@ class SerialManager:
         while self.running:
             try:
                 line = await self.reader.readline()
-                if line:
-                    data = line.decode('utf-8').strip()
-                    if data:
-                        if self.print_receive:
-                            print(f"SERIALMANAGER Received: {data}")
-                        try:
-                            message_json = json.loads(data)
-                            if "send_id" in message_json:
-                                async with self.buffer_lock:
-                                    self.read_buffer[message_json["send_id"]] = message_json
-                                cleanup_time = time.perf_counter() + 1.0  # 1 second timeout
-                                async with self.cleanup_lock:
-                                    self.cleanup_queue.append((cleanup_time, message_json["send_id"]))
-                        except json.JSONDecodeError:
-                            print(f"SERIALMANAGER JSON Decode error: {data}")
+                if not line:
+                    continue
+
+                data = line.decode('utf-8').strip()
+                if not data:
+                    continue
+
+                if self.print_receive:
+                    print(f"SERIALMANAGER Received: {data}")
+
+                try:
+                    message_json = json.loads(data)
+                    if "send_id" in message_json:
+                        send_id = message_json["send_id"]
+                        async with self.buffer_lock:
+                            self.read_buffer[send_id] = message_json
+
+                        cleanup_time = time.perf_counter() + 1.0  # 1 second timeout
+                        async with self.cleanup_lock:
+                            self.cleanup_queue.append((cleanup_time, send_id))
+                except json.JSONDecodeError:
+                    print(f"SERIALMANAGER JSON Decode error: {data}")
             except Exception as e:
                 print(f"SERIALMANAGER Read error: {e}")
                 await asyncio.sleep(0.1)  # Longer sleep on error
@@ -135,14 +142,11 @@ class SerialManager:
                 print(f"SERIALMANAGER Cleanup error: {e}")
                 await asyncio.sleep(0.1)
 
-    def send_receive(self, message_json, sendresponse_lambda):
+    async def send_receive(self, message_json:dict) -> str:
         """Send message to serial port (non-blocking)"""
         if not self.writer:
             print("SERIALMANAGER Error: Serial port not open")
-        
-        self.loop.create_task(self._async_send_receive(message_json, sendresponse_lambda))
-        
-    async def _async_send_receive(self, message_json, sendresponse_lambda):
+            return "SERIALMANAGER Error: Serial port not open"
         try:
             async with self.send_id_lock:
                 send_id = self.send_id
@@ -162,18 +166,15 @@ class SerialManager:
                 async with self.buffer_lock:
                     if send_id in self.read_buffer:
                         response = json.dumps(self.read_buffer[send_id])
-                        sendresponse_lambda(response)
                         del self.read_buffer[send_id]
-                        return
+                        return response
                 if time.perf_counter() - start_time > timeout_time:
                     print(f"SERIALMANAGER Timeout waiting for response with send_id {send_id}")
-                    sendresponse_lambda(f"SERIALMANAGER Timeout waiting for response with send_id {send_id}")
-                    return
+                    return f"SERIALMANAGER Timeout waiting for response with send_id {send_id}"
                 await asyncio.sleep(0.001)
         except Exception as e:
             print(f"SERIALMANAGER Send error: {e}")
-            sendresponse_lambda(f"SERIALMANAGER Send error: {e}")
-            return
+            return f"SERIALMANAGER Send error: {e}"
 
     def is_connected(self):
         """Check if serial connection is active"""
@@ -193,18 +194,18 @@ class SerialManager:
             print(f"SERIALMANAGER Serial port {self.port} closed")
 
 class Board:
-    def __init__(self, name, serialmanager: SerialManager, state):
-        self.name = name
-        self.serialmanager = serialmanager
-        self.state = state
+    def __init__(self, name: str, serialmanager: SerialManager, state: dict):
+        self.name: str = name
+        self.serialmanager: SerialManager = serialmanager
+        self.state: dict = state
 
 class HardwareHandler:
-    def __init__(self, emulator=False, debug_prints=False):
-        self.emulator = emulator
-        self.debug_prints = debug_prints
-        self.boards = []
+    def __init__(self, emulator: bool = False, debug_prints: bool = False):
+        self.emulator: bool = emulator
+        self.debug_prints: bool = debug_prints
+        self.boards: list[Board] = []
 
-        self.state_defaults = {
+        self.state_defaults: dict = {
             "servos": {"angle": None},
             "solenoids": {"armed": False, "powered": False},
             "pyros": {"armed": False, "powered": False},
@@ -257,6 +258,7 @@ class HardwareHandler:
 
                 for hw_type in self.hardware_types:
                     if hw_type in board_config:
+                        state[hw_type] = {}
                         for item_name, item_data in board_config[hw_type].items():
                             state[hw_type][item_name] = {**self.state_defaults[hw_type].copy(), **item_data}
 
@@ -265,10 +267,9 @@ class HardwareHandler:
             print("No boards found in configuration or invalid board configuration")
     
     def update_board_state(self, board_name, new_state):
-        if board_name in self.config['boards']:
-            board = self.boards[board_name]
-        else:
-            print(f"Board {board_name} not found in configuration")
+        board = next((b for b in self.boards if b.name == board_name), None)
+        if not board:
+            print(f"Board {board_name} not found")
             return
         
         for hw_type in self.hardware_types:
@@ -307,14 +308,20 @@ class HardwareHandler:
         await self.load_hardware()
         return "Hardware configuration reloaded successfully"
         
-    def send_receive(self, board_name, message, sendresponse_lambda):
+    async def send_receive(self, board_name, message):
         """Send a message to a specific board and receive the response"""
-        manager = self.get_serial_manager(board_name)
-        if manager:
-            manager.send_receive(message, sendresponse_lambda)
-        else:
+        board = next((b for b in self.boards if b.name == board_name), None)
+        if not board:
             print(f"Board {board_name} not found")
-            sendresponse_lambda(f"Board {board_name} not found")
+            return f"Board {board_name} not found"
+        if not board.serialmanager:
+            print(f"Board {board_name} does not have a serial manager")
+            return f"Board {board_name} does not have a serial manager"
+        manager = board.serialmanager
+        response = await manager.send_receive(message)
+        self.update_board_state(board_name, json.loads(response))
+        return response
+
 
 class CommandHandler:
     def __init__(self, state_machine: StateMachine, hardware_handler: HardwareHandler):
@@ -329,33 +336,33 @@ class CommandHandler:
             "get state": self.state_machine.get_state,
         }
 
-    def process_message(self, command, sendresponse_lambda):
+    async def process_message(self, command):
         message_json = json.loads(command)
         command = message_json["command"]
         data = message_json["data"]
         if command in self.commands:
-            self.commands[command](data, sendresponse_lambda)
+            response = await self.commands[command](data)
+            return response
         else:
-            sendresponse_lambda(f"Unknown command: {command}")
-            print(f"Unknown command: {command}")
+            return f"Unknown command: {command}"
         
 
-    def get_hardware_json(self, _, sendresponse_lambda):
-        sendresponse_lambda(json.dumps(self.hardware_handler.get_config()))
+    def get_hardware_json(self, _):
+        return json.dumps(self.hardware_handler.get_config())
     
-    def set_hardware_json(self, data, sendresponse_lambda):
-        sendresponse_lambda(self.hardware_handler.set_config(data))
+    def set_hardware_json(self, data):
+        return self.hardware_handler.set_config(data)
 
-    async def reload_hardware_json(self, _, sendresponse_lambda):
-        sendresponse_lambda(await self.hardware_handler.reload_config())
+    async def reload_hardware_json(self, _):
+        return await self.hardware_handler.reload_config()
 
-    def send_receive(self, data, sendresponse_lambda):
+    async def send_receive(self, data):
         try:
             board_name = data["board_name"]
             message_json = data["message"]
-            self.hardware_handler.send_receive(board_name, message_json, sendresponse_lambda)
+            return await self.hardware_handler.send_receive(board_name, message_json)
         except KeyError as e:
-            sendresponse_lambda(f"Missing key in data: {e}")
+            return f"Missing key in data: {e}"
 
 class UDPServer:
     def __init__(self, command_handler: CommandHandler, host='0.0.0.0', port=8888, print_send=False, print_receive=False):
@@ -388,11 +395,17 @@ class UDPServer:
                     print(f"UDP Received: '{message}' from {addr}")
                 
                 # Process the message
-                self.server.command_handler.process_message(
-                    message, 
-                    lambda x: self.server.transport.sendto(x.encode('utf-8'), addr)
-                )
-        
+                asyncio.create_task(self._process_message(message, addr))
+
+            async def _process_message(self, message, addr):
+                try:
+                    response = await self.server.command_handler.process_message(message) 
+                    self.server.transport.sendto(response.encode('utf-8'), addr)
+                except Exception as e:
+                    print(f"Error processing message: {e}")
+                    error_response = f"Error processing message: {e}"
+                    self.server.transport.sendto(error_response.encode('utf-8'), addr)
+
         loop = asyncio.get_event_loop()
         self.transport, self.protocol = await loop.create_datagram_endpoint(
             lambda: UDPServerProtocol(self),
@@ -508,7 +521,6 @@ if __name__ == "__main__":
     
 '''
 TODO
-- Current state of each hardware component
 - Logging of each state to a csv file (Ability to name it after a test)
 - Auto starting and auto requesting of data
 
