@@ -204,6 +204,22 @@ class HardwareHandler:
         self.debug_prints = debug_prints
         self.boards = []
 
+        self.state_defaults = {
+            "servos": {"angle": None},
+            "solenoids": {"armed": False, "powered": False},
+            "pyros": {"armed": False, "powered": False},
+            "pts": {"p": None},
+            "tcs": {"t": None},
+            "loadcells": {"force": None},
+            "imus": {"a_x": None, "a_y": None, "a_z": None, "g_x": None, "g_y": None, "g_z": None},
+            "gps": {"la": None, "lo": None, "alt": None},
+            "mags": {"m_x": None, "m_y": None, "m_z": None},
+            "baros": {"alt": None},
+            #"encoders": {"po": None},
+            "voltage": {"v": None}
+        }
+        self.hardware_types = list(self.state_defaults.keys())
+
         with open('hardware_config.json', 'r') as file:
             self.config = json.load(file)
         with open('hardware_config.json', 'w') as file:
@@ -216,9 +232,9 @@ class HardwareHandler:
     async def load_hardware(self):
         # Initialize serial managers for each board in the configuration
         if 'boards' in self.config:
-            for board in self.config['boards']:
-                board_name = board['board_name']
-                serial_config = board['serial']
+            for board_config in self.config['boards']:
+                board_name = board_config['board_name']
+                serial_config = board_config['serial']
 
                 serial_manager = None
                 state = {"updated": False}
@@ -238,28 +254,11 @@ class HardwareHandler:
                         print(f"Failed to initialize serial for board {board_name}: {e}")
                 else:
                     print(f"Board {board_name} is missing port or baudrate configuration")
-                if 'servos' in board:
-                    state['servos'] = {}
-                    for servo_name, servo_data in board['servos'].items():
-                        state['servos'][servo_name] = {"angle": 0, **servo_data}
-                        
-                if 'solenoids' in board:
-                    state['solenoids'] = {}
-                    for solenoid_name, solenoid_data in board['solenoids'].items():
-                        state['solenoids'][solenoid_name] = {
-                            "armed": False, 
-                            "powered": False,
-                            **solenoid_data
-                        }
-                        
-                if 'pyros' in board:
-                    state['pyros'] = {}
-                    for pyro_name, pyro_data in board['pyros'].items():
-                        state['pyros'][pyro_name] = {
-                            "armed": False, 
-                            "powered": False,
-                            **pyro_data
-                        }
+
+                for hw_type in self.hardware_types:
+                    if hw_type in board_config:
+                        for item_name, item_data in board_config[hw_type].items():
+                            state[hw_type][item_name] = {**self.state_defaults[hw_type].copy(), **item_data}
 
                 self.boards.append(Board(board_name, serial_manager, state))
         else:
@@ -272,9 +271,7 @@ class HardwareHandler:
             print(f"Board {board_name} not found in configuration")
             return
         
-        hardware_types = ['servos', 'solenoids', 'pyros', 'pt', 'tc', 'lc', 'imu', 'gps', 'mag', 'baro', 'encoder']
-
-        for hw_type in hardware_types:
+        for hw_type in self.hardware_types:
             if hw_type in new_state and hw_type in board.state:
                 for item_name, item_data in new_state[hw_type].items():
                     if item_name in board.state[hw_type]:
@@ -465,7 +462,7 @@ async def main(emulator=False):
     signal_handler = SignalHandler(udp_server, emulator) #To handle system interrupts
     
     print("Startup Complete, waiting for commands")
-    time_keeper = TimeKeeper(cycle_time = 0.01, debug_time = 1.0)
+    time_keeper = TimeKeeper(cycle_time = 0.01, debug_time = 0.0)
 
     try:
         while True:

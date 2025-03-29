@@ -1,29 +1,27 @@
 {
-    "-1000":{
-        {
-            "board_name": "ActuatorBoard",
-            "message": {
-                "timestamp": 0,
-                "source": "RP4",
-                "destination": "ActuatorBoard",
-                "servos": [
-                    {
-                        "channel": 15,
-                        "armed": true,
-                        "pwm": 1550,
-                        "name": "Servo1"
-                    }
-                ],
-                "solenoids": [
-                    {
-                        "gpio": 40,
-                        "armed": true,
-                        "powered": false,
-                        "name": "LED"
-                    }
-                ]
-            }
+    "-1000":
+    {
+        "board_name": "ActuatorBoard",
+        "message": {
+            "timestamp": 0,
+            "source": "RP4",
+            "destination": "ActuatorBoard",
+            "servos": [
+                {
+                    "channel": 15,
+                    "armed": true,
+                    "pwm": 1550,
+                    "name": "Servo1"
+                }
+            ],
+            "solenoids": [
+                {
+                    "gpio": 40,
+                    "armed": true,
+                    "powered": false,
+                    "name": "LED"
+                }
+            ]
         }
-        
-    }
+    }       
 }

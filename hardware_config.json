@@ -10,12 +10,14 @@
                 "Fuel Main": {
                     "channel": 15,
                     "minangle": 0,
-                    "maxangle": 180
+                    "maxangle": 180,
+                    "safe_angle": 0
                 },
                 "Ox Main": {
                     "channel": 14,
                     "minangle": 0,
-                    "maxangle": 180
+                    "maxangle": 180,
+                    "safe_angle": 0
                 }
             },
             "solenoids": {
