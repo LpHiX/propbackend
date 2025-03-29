@@ -10,15 +10,17 @@ import os
 import platform
 
 class MachineStates(Enum):
+    STARTTUP = 0
     IDLE = 1
-    ABORT = 2
-    HOTFIRE = 3
-    LAUNCH = 4
-    HOVER = 5
+    ENGINEABORT = 2
+    FTS = 3
+    HOTFIRE = 4
+    LAUNCH = 5
+    HOVER = 6
 
 class StateMachine:
     def __init__(self):
-        self.state = MachineStates.IDLE
+        self.state = MachineStates.STARTTUP
 
     def set_state(self, state):
         if isinstance(state, MachineStates):
@@ -51,7 +53,6 @@ class SerialManager:
 
         self.reader = None
         self.writer = None
-        self.loop = asyncio.get_event_loop()
 
     async def initialize(self):
         """Initialize the serial connection"""
@@ -72,8 +73,8 @@ class SerialManager:
             # Start the background reading thread
             self.running = True
 
-            self.read_task = self.loop.create_task(self._read_loop())
-            self.cleanup_task = self.loop.create_task(self._readbuffer_cleanloop())
+            self.read_task = asyncio.create_task(self._read_loop())
+            self.cleanup_task = asyncio.create_task(self._readbuffer_cleanloop())
 
             return True
             
@@ -145,7 +146,7 @@ class SerialManager:
     async def send_receive(self, message_json:dict) -> str:
         """Send message to serial port (non-blocking)"""
         if not self.writer:
-            print("SERIALMANAGER Error: Serial port not open")
+            #print("SERIALMANAGER Error: Serial port not open")
             return "SERIALMANAGER Error: Serial port not open"
         try:
             async with self.send_id_lock:
@@ -279,6 +280,39 @@ class HardwareHandler:
                         for key, value in item_data.items():
                             board.state[hw_type][item_name][key] = value
 
+    def generate_command(self, command:str, board_name:str, desired_state:dict) -> str:
+        return json.dumps({
+            "command": command,
+            "data":
+            {
+                "board_name": board_name,
+                "message": desired_state
+            }
+        })
+    def get_startup_tasks(self):
+        """Get startup tasks from the hardware configuration"""
+        startup_tasks = {}
+        if 'boards' not in self.config:
+            print("No boards found in configuration")
+            return startup_tasks
+            
+        for board_config in self.config['boards']:
+            board_name = board_config['board_name']
+            message = {"timestamp": 0, board_name: {}}
+
+            for hw_type in self.hardware_types:
+                if hw_type in board_config:
+                    message[board_name][hw_type] = {}
+                    for item_name, item_data in board_config[hw_type].items():
+                        message[board_name][hw_type][item_name] = {"channel": item_data['channel']}
+                        if hw_type == "servos":
+                            message[board_name]["servos"][item_name]["armed"] = False
+                            if 'safe_angle' in item_data:
+                                message[board_name]["servos"][item_name]["armed"] = True
+                                message[board_name]["servos"][item_name]["angle"] = item_data['safe_angle']
+            startup_tasks[f"{board_name} Startup Tasks"] = self.generate_command("send_receive", board_name, message)
+        return startup_tasks
+
     def unload_hardware(self):
         # Close all serial connections
         for board in self.boards:
@@ -319,11 +353,15 @@ class HardwareHandler:
             return f"Board {board_name} does not have a serial manager"
         manager = board.serialmanager
         response = await manager.send_receive(message)
-        self.update_board_state(board_name, json.loads(response))
-        return response
+        try:
+            response = json.loads(response)
+            self.update_board_state(board_name, json.loads(response))
+            return response
+        except json.JSONDecodeError:
+            return response
 
 
-class CommandHandler:
+class CommandProcessor:
     def __init__(self, state_machine: StateMachine, hardware_handler: HardwareHandler):
         self.state_machine = state_machine
         self.hardware_handler = hardware_handler
@@ -334,6 +372,7 @@ class CommandHandler:
             "send_receive": self.send_receive,
             "set state": self.state_machine.set_state,
             "get state": self.state_machine.get_state,
+            "get startup tasks": self.get_startup_tasks,
         }
 
     async def process_message(self, command):
@@ -363,10 +402,60 @@ class CommandHandler:
             return await self.hardware_handler.send_receive(board_name, message_json)
         except KeyError as e:
             return f"Missing key in data: {e}"
+        
+    def get_startup_tasks(self, _):
+        return self.hardware_handler.get_startup_tasks()
+
+class RecurringTask:
+    def __init__(self, command_processor: CommandProcessor, name: str, interval: float, command: str):
+        self.command_processor = command_processor
+        self.name = name
+        self.interval = interval
+        self.command = command
+        self.timekeeper = TimeKeeper(cycle_time=interval)
+        self.running = True
+    async def start_task(self):
+        print(f"Starting task: {self.name} with interval {self.interval}")
+        while self.running:
+            self.timekeeper.cycle_start()
+            asyncio.create_task(self.command_processor.process_message(self.command))
+            await self.timekeeper.cycle_end()
+    def kill_task(self):
+        self.running = False
+        print(f"Stopping task: {self.name}")
+
+class RecurringTaskHandler:
+    def __init__(self, command_processor: CommandProcessor, state_machine: StateMachine):
+        self.command_processor = command_processor
+        self.state_machine = state_machine
+        self.recurring_tasks: list[RecurringTask] = []
+
+        if self.state_machine.get_state() == MachineStates.STARTTUP:
+            startup_interval = 0.1
+            startup_tasks = self.command_processor.get_startup_tasks(None)
+            for task_name, task_command in startup_tasks.items():
+                task = RecurringTask(self.command_processor, task_name, startup_interval, task_command)
+                self.recurring_tasks.append(task)
+                asyncio.create_task(task.start_task())   
+            
+    def add_task(self, task):
+        self.tasks.append(task)
+
+    def stop_task(self, task):
+        task.kill_task()
+
+    def get_task(self, task_name):
+        for task in self.tasks:
+            if task.name == task_name:
+                return task
+        return None
+
+    def get_tasks(self) -> list[RecurringTask]:
+        return self.recurring_tasks
 
 class UDPServer:
-    def __init__(self, command_handler: CommandHandler, host='0.0.0.0', port=8888, print_send=False, print_receive=False):
-        self.command_handler = command_handler
+    def __init__(self, command_processor: CommandProcessor, host='0.0.0.0', port=8888, print_send=False, print_receive=False):
+        self.command_processor = command_processor
         self.host = host
         self.port = port
         self.print_send = print_send
@@ -375,8 +464,7 @@ class UDPServer:
         self.transport = None
         self.protocol = None
 
-        loop = asyncio.get_event_loop()
-        loop.create_task(self._start_server())
+        asyncio.create_task(self._start_server())
 
         print(f"UDP server listening on {self.host}:{self.port}")
 
@@ -399,14 +487,14 @@ class UDPServer:
 
             async def _process_message(self, message, addr):
                 try:
-                    response = await self.server.command_handler.process_message(message) 
+                    response = await self.server.command_processor.process_message(message) 
                     self.server.transport.sendto(response.encode('utf-8'), addr)
                 except Exception as e:
                     print(f"Error processing message: {e}")
                     error_response = f"Error processing message: {e}"
                     self.server.transport.sendto(error_response.encode('utf-8'), addr)
-
-        loop = asyncio.get_event_loop()
+        
+        loop = asyncio.get_running_loop()
         self.transport, self.protocol = await loop.create_datagram_endpoint(
             lambda: UDPServerProtocol(self),
             local_addr=(self.host, self.port)
@@ -419,11 +507,11 @@ class UDPServer:
         print("UDP Server stopped")
 
 class SignalHandler:
-    def __init__(self, udp_server, emulator=False):
+    def __init__(self, udp_server, windows=False):
         self.udp_server = udp_server
         signal.signal(signal.SIGINT, self.handle_signal)  # Handle Ctrl+C
         signal.signal(signal.SIGTERM, self.handle_signal)  # Handle termination
-        if(not emulator):
+        if(not windows):
             signal.signal(signal.SIGTSTP, self.handle_suspend)
 
     def handle_signal(self, signum, frame):
@@ -462,7 +550,7 @@ class TimeKeeper:
     def get_cycle(self):
         return self.cycle
 
-async def main(emulator=False):
+async def main(windows=False, emulator=False):
     deployment_power = False
 
     state_machine = StateMachine()
@@ -470,24 +558,31 @@ async def main(emulator=False):
     hardware_handler = HardwareHandler(emulator=emulator, debug_prints=False)
     await hardware_handler.initialize()
 
-    command_handler = CommandHandler(state_machine, hardware_handler)
-    udp_server = UDPServer(command_handler, print_send=False, print_receive=False)
-    signal_handler = SignalHandler(udp_server, emulator) #To handle system interrupts
+    command_processor = CommandProcessor(state_machine, hardware_handler)
+    udp_server = UDPServer(command_processor, print_send=False, print_receive=False)
+    signal_handler = SignalHandler(udp_server, windows) #To handle system interrupts
     
     print("Startup Complete, waiting for commands")
-    time_keeper = TimeKeeper(cycle_time = 0.01, debug_time = 0.0)
+    recurring_taskhandler = RecurringTaskHandler(command_processor, state_machine)
+
+
+    main_loop_time_keeper = TimeKeeper(cycle_time = 0.01, debug_time = 1.0)
 
     try:
         while True:
-            time_keeper.cycle_start()
+            main_loop_time_keeper.cycle_start()
 
             current_state = state_machine.get_state()
-            
+            if(main_loop_time_keeper.get_cycle() % 100 == 0):
+                print(len(asyncio.all_tasks()))
             # Perform actions based on current state
             if current_state == MachineStates.IDLE:
                 pass
 
-            elif current_state == MachineStates.ABORT:
+            elif current_state == MachineStates.ENGINEABORT:
+                pass
+
+            elif current_state == MachineStates.FTS:
                 pass
 
             elif current_state == MachineStates.HOTFIRE:
@@ -500,7 +595,7 @@ async def main(emulator=False):
                 pass
             
             # Sleep to avoid excessive CPU usage
-            await time_keeper.cycle_end()
+            await main_loop_time_keeper.cycle_end()
 
     except KeyboardInterrupt:
         signal_handler.handle_signal(signal.SIGINT, None)
@@ -516,8 +611,9 @@ if __name__ == "__main__":
             print("uvloop not available. Run: pip install uvloop for better performance")
         asyncio.run(main())
     else:
-        print("Running on Windows - standard event loop will be used and using serial emulator")
-        asyncio.run(main(emulator=True))
+        print("Running on Windows - standard event loop will be used")
+        asyncio.run(main(windows=True))
+    #syncio.run(main(emulator=True))
     
 '''
 TODO

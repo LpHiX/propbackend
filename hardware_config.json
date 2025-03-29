@@ -3,7 +3,7 @@
         {
             "board_name": "ActuatorBoard",
             "serial": {
-                "port": "/dev/ttyS0",
+                "port": "COM4",
                 "baudrate": 921600
             },
             "servos": {
@@ -27,15 +27,15 @@
             },
             "solenoids": {
                 "LED": {
-                    "gpio": 40
+                    "channel": 40
                 },
                 "SrvPower": {
-                    "gpio": 39
+                    "channel": 39
                 }
             },
             "pyros": {
                 "Igniter": {
-                    "gpio": 30
+                    "channel": 30
                 }
             }
         },
@@ -47,9 +47,23 @@
             },
             "pts": {
                 "Ox Inj": {
+                    "channel": 0,
                     "raw": 0,
                     "gain": 1,
                     "offset": 0
+                }
+            },
+            "tcs": {
+                "Temperature Sensor": {
+                    "channel": 1,
+                    "raw": 0,
+                    "gain": 1,
+                    "offset": 0
+                }
+            },
+            "gps": {
+                "GPS": {
+                    "channel": 2
                 }
             }
         }
