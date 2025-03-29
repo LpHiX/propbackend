@@ -2,8 +2,10 @@
     "boards": [
         {
             "board_name": "ActuatorBoard",
+            "active_interval": 0.1,
+            "idle_interval": 0.1,
             "serial": {
-                "port": "COM4",
+                "port": "/dev/ttyS0",
                 "baudrate": 921600
             },
             "servos": {
@@ -41,6 +43,8 @@
         },
         {
             "board_name": "Sensorboard0",
+            "active_interval": 0.02,
+            "idle_interval": 0.1,
             "serial": {
                 "port": "/dev/ttyS1",
                 "baudrate": 921600

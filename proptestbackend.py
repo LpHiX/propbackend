@@ -9,6 +9,7 @@ import serial_asyncio
 import os
 import platform
 
+
 class MachineStates(Enum):
     STARTTUP = 0
     IDLE = 1
@@ -195,10 +196,11 @@ class SerialManager:
             print(f"SERIALMANAGER Serial port {self.port} closed")
 
 class Board:
-    def __init__(self, name: str, serialmanager: SerialManager, state: dict):
+    def __init__(self, name: str, serialmanager: SerialManager, state: dict, config: dict):
         self.name: str = name
         self.serialmanager: SerialManager = serialmanager
         self.state: dict = state
+        self.config: dict = config
 
 class HardwareHandler:
     def __init__(self, emulator: bool = False, debug_prints: bool = False):
@@ -263,7 +265,7 @@ class HardwareHandler:
                         for item_name, item_data in board_config[hw_type].items():
                             state[hw_type][item_name] = {**self.state_defaults[hw_type].copy(), **item_data}
 
-                self.boards.append(Board(board_name, serial_manager, state))
+                self.boards.append(Board(board_name, serial_manager, state, board_config))
         else:
             print("No boards found in configuration or invalid board configuration")
     
@@ -289,9 +291,9 @@ class HardwareHandler:
                 "message": desired_state
             }
         })
-    def get_startup_tasks(self):
+    def get_startup_tasks(self, command_processor):
         """Get startup tasks from the hardware configuration"""
-        startup_tasks = {}
+        startup_tasks = []
         if 'boards' not in self.config:
             print("No boards found in configuration")
             return startup_tasks
@@ -310,8 +312,10 @@ class HardwareHandler:
                             if 'safe_angle' in item_data:
                                 message[board_name]["servos"][item_name]["armed"] = True
                                 message[board_name]["servos"][item_name]["angle"] = item_data['safe_angle']
-            startup_tasks[f"{board_name} Startup Tasks"] = self.generate_command("send_receive", board_name, message)
+            startup_command = self.generate_command("send_receive", board_name, message)
+            startup_tasks.append(RecurringTask(command_processor, f"{board_name}_MainTask", board_config['active_interval'], startup_command))
         return startup_tasks
+    
 
     def unload_hardware(self):
         # Close all serial connections
@@ -354,8 +358,8 @@ class HardwareHandler:
         manager = board.serialmanager
         response = await manager.send_receive(message)
         try:
-            response = json.loads(response)
-            self.update_board_state(board_name, json.loads(response))
+            response_dict = json.loads(response)
+            self.update_board_state(board_name, response_dict)
             return response
         except json.JSONDecodeError:
             return response
@@ -404,7 +408,11 @@ class CommandProcessor:
             return f"Missing key in data: {e}"
         
     def get_startup_tasks(self, _):
-        return self.hardware_handler.get_startup_tasks()
+        return self.hardware_handler.get_startup_tasks(self)
+
+    def disarm_all(self, _) -> str:
+        return self.hardware_handler.disarm_all()
+        
 
 class RecurringTask:
     def __init__(self, command_processor: CommandProcessor, name: str, interval: float, command: str):
@@ -412,7 +420,7 @@ class RecurringTask:
         self.name = name
         self.interval = interval
         self.command = command
-        self.timekeeper = TimeKeeper(cycle_time=interval)
+        self.timekeeper = TimeKeeper(self.name,cycle_time=interval)
         self.running = True
     async def start_task(self):
         print(f"Starting task: {self.name} with interval {self.interval}")
@@ -420,34 +428,50 @@ class RecurringTask:
             self.timekeeper.cycle_start()
             asyncio.create_task(self.command_processor.process_message(self.command))
             await self.timekeeper.cycle_end()
+    def set_interval(self, interval: float):
+        self.interval = interval
+        self.timekeeper.set_interval(interval)
+        print(f"Task {self.name} interval set to {self.interval}")
     def kill_task(self):
         self.running = False
         print(f"Stopping task: {self.name}")
 
 class RecurringTaskHandler:
-    def __init__(self, command_processor: CommandProcessor, state_machine: StateMachine):
-        self.command_processor = command_processor
+    def __init__(self, state_machine: StateMachine, command_processor: CommandProcessor, hardware_handler: HardwareHandler):
+        self.hardware_handler = hardware_handler
         self.state_machine = state_machine
+        self.command_processor = command_processor
         self.recurring_tasks: list[RecurringTask] = []
 
-        if self.state_machine.get_state() == MachineStates.STARTTUP:
-            startup_interval = 0.1
-            startup_tasks = self.command_processor.get_startup_tasks(None)
-            for task_name, task_command in startup_tasks.items():
-                task = RecurringTask(self.command_processor, task_name, startup_interval, task_command)
-                self.recurring_tasks.append(task)
-                asyncio.create_task(task.start_task())   
-            
-    def add_task(self, task):
-        self.tasks.append(task)
+        if state_machine.get_state() == MachineStates.STARTTUP:
+            self.on_machine_startup()
+
+    def on_machine_startup(self):
+        self.recurring_tasks = self.command_processor.get_startup_tasks(self.command_processor)
+        for recurring_task in self.recurring_tasks:
+            asyncio.create_task(recurring_task.start_task())
+
+    def set_tasks_idle(self):
+        for board in self.hardware_handler.boards:
+            idle_interval = board.config["idle_interval"]
+            recurring_task = self.get_recurring_task(f'{board.name}_MainTask')
+            if recurring_task:
+                recurring_task.set_interval(idle_interval)
+
+    def set_tasks_active(self):
+        for board in self.hardware_handler.boards:
+            active_interval = board.config["active_interval"]
+            recurring_task = self.get_recurring_task(f'{board.name}_MainTask')
+            if recurring_task:
+                recurring_task.set_interval(active_interval)
 
     def stop_task(self, task):
         task.kill_task()
 
-    def get_task(self, task_name):
-        for task in self.tasks:
-            if task.name == task_name:
-                return task
+    def get_recurring_task(self, recurring_task_name) -> RecurringTask:
+        for recurring_task in self.recurring_tasks:
+            if recurring_task.name == recurring_task_name:
+                return recurring_task
         return None
 
     def get_tasks(self) -> list[RecurringTask]:
@@ -528,27 +552,45 @@ class SignalHandler:
         os.kill(os.getpid(), signal.SIGTSTP)
 
 class TimeKeeper:
-    def __init__(self, cycle_time=0.01, debug_time=0.0):
+    def __init__(self, name, cycle_time, debug_time=0.0):
+        self.name = name
         self.debug_time = debug_time
         self.cycle_time = cycle_time
         self.start_time = time.perf_counter()
+        self.statechange_time = self.start_time
         self.cycle = 0
+
+    def set_interval(self, cycle_time):
+        self.cycle_time = cycle_time
+        self.cycle = 0
+        self.statechange_time = time.perf_counter()
 
     def cycle_start(self):
         self.cycle_starttime = time.perf_counter()
         if self.debug_time > 0:
             if(self.cycle % (self.debug_time / self.cycle_time) == 0):
-                print(f"Cycle {self.cycle} started at {time.perf_counter() - self.start_time:.5f} seconds")
-        
+                print(f"TimeKeeper {self.name} is at cycle {self.cycle} at {time.perf_counter() - self.start_time:.5f} seconds")
+
+    def time_since_start(self) -> float:
+        return time.perf_counter() - self.start_time
+    
+    def statechange(self) -> None:
+        self.cycle = 0
+        self.statechange_time = time.perf_counter()
+
+    def time_since_statechange(self) -> float:
+        return time.perf_counter() - self.statechange_time
 
     async def cycle_end(self):
         self.cycle += 1
-        next_time = self.start_time + (self.cycle + 1) * self.cycle_time
+        next_time = self.statechange_time + (self.cycle + 1) * self.cycle_time
         await asyncio.sleep(max(0, next_time - time.perf_counter()))  # Sleep for the remaining cycle time
 
 
     def get_cycle(self):
         return self.cycle
+
+
 
 async def main(windows=False, emulator=False):
     deployment_power = False
@@ -563,10 +605,10 @@ async def main(windows=False, emulator=False):
     signal_handler = SignalHandler(udp_server, windows) #To handle system interrupts
     
     print("Startup Complete, waiting for commands")
-    recurring_taskhandler = RecurringTaskHandler(command_processor, state_machine)
+    recurring_taskhandler = RecurringTaskHandler(state_machine, command_processor, hardware_handler)
 
 
-    main_loop_time_keeper = TimeKeeper(cycle_time = 0.01, debug_time = 1.0)
+    main_loop_time_keeper = TimeKeeper(name="MainLoop", cycle_time=0.01, debug_time=1.0)
 
     try:
         while True:
@@ -574,10 +616,23 @@ async def main(windows=False, emulator=False):
 
             current_state = state_machine.get_state()
             if(main_loop_time_keeper.get_cycle() % 100 == 0):
-                print(len(asyncio.all_tasks()))
+                # print(len(asyncio.all_tasks()))
+                for board in hardware_handler.boards:
+                    #print(json.dumps(board.state, indent=4))
+                    pass
             # Perform actions based on current state
-            if current_state == MachineStates.IDLE:
+            if current_state == MachineStates.STARTTUP:
+                if main_loop_time_keeper.time_since_statechange() > 5:
+                    state_machine.set_state(MachineStates.IDLE)
+                    recurring_taskhandler.set_tasks_idle()
+                    main_loop_time_keeper.statechange()
+                    print("State changed to IDLE")
+            
+            elif current_state == MachineStates.IDLE:
+                # if main_loop_time_keeper.time_since_statechange() < 2:
+                #     command_processor.disarm_all()
                 pass
+                    
 
             elif current_state == MachineStates.ENGINEABORT:
                 pass
