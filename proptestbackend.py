@@ -477,20 +477,34 @@ class CommandProcessor:
             "disarm all": self.disarm_all,
             "get hotfire sequence": self.get_hotfire_sequences,
             "set hotfire sequence": self.set_hotfire_sequences,
-            "start hotfire sequence": None,
-            "abort engine": None,
-            "fts": None,
+            "start hotfire sequence": self.start_hotfire_sequence,
+            "abort engine": self.abort_engine,
+            "fts": self.fts,
         }
     def get_running_tasks(self, _):
-        raise NotImplementedError("get_running_tasks not implemented")
+        print("get_running_tasks not implemented")
+        return "get_running_tasks not implemented"
     def add_and_run_task(self, data):
-        raise NotImplementedError("add_and_run_task not implemented")
+        print("add_and_run_task not implemented")
+        return "add_and_run_task not implemented"
     def stop_task(self, data):
-        raise NotImplementedError("stop_task not implemented")
+        print("stop_task not implemented")
+        return "stop_task not implemented"
     def get_hotfire_sequences(self, data):
-        raise NotImplementedError("get_hotfire_sequences not implemented")
+        print("get_hotfire_sequences not implemented")
+        return "get_hotfire_sequences not implemented"
     def set_hotfire_sequences(self, data):
-        raise NotImplementedError("set_hotfire_sequences not implemented")
+        print("set_hotfire_sequences not implemented")
+        return "set_hotfire_sequences not implemented"
+    def start_hotfire_sequence(self, data):
+        print("start_hotfire_sequence not implemented")
+        return "start_hotfire_sequence not implemented"
+    def abort_engine(self, data):
+        print("abort_engine not implemented")
+        return "abort_engine not implemented"
+    def fts(self, data):
+        print("fts not implemented")
+        return "fts not implemented"
 
     async def process_message(self, command):
         message_json = json.loads(command)
@@ -768,8 +782,7 @@ if __name__ == "__main__":
     '''
     TODO
     - Logging of each state to a csv file (Ability to name it after a test)
-    - Auto starting and auto requesting of data
-
+    - hotfires  
     - UDP and serial json logging
     Lower priority
     - only send actuator commands if deployment power is on
