@@ -1,27 +1,83 @@
 {
-    "-1000":
-    {
-        "board_name": "ActuatorBoard",
-        "message": {
-            "timestamp": 0,
-            "source": "RP4",
-            "destination": "ActuatorBoard",
-            "servos": [
-                {
+    "time_before_ignition": 15,
+    "hotfire_safing_time": 5,
+    "start_end_desiredstate": {
+        "ActuatorBoard": {
+            "servos": {
+                "Fuel Main": {
                     "channel": 15,
                     "armed": true,
-                    "pwm": 1550,
-                    "name": "Servo1"
-                }
-            ],
-            "solenoids": [
-                {
-                    "gpio": 40,
+                    "angle": 0
+                },
+                "Ox Main": {
+                    "channel": 14,
                     "armed": true,
-                    "powered": false,
-                    "name": "LED"
+                    "angle": 0
+                },
+                "Ox Vent": {
+                    "channel": 13,
+                    "armed": false,
+                    "angle": 0
                 }
-            ]
+            },
+            "solenoids": {
+                "LED": {
+                    "channel": 40,
+                    "armed": true,
+                    "powered": true
+                }
+            }
         }
-    }       
+    },
+    "sequence": {
+        "-1": {
+            "ActuatorBoard": {
+                "servos": {
+                    "Fuel Main": {
+                        "channel": 15,
+                        "armed": true,
+                        "angle": 0
+                    },
+                    "Ox Main": {
+                        "channel": 14,
+                        "armed": true,
+                        "angle": 0
+                    }
+                }
+            }
+        },
+        "0": {
+            "ActuatorBoard": {
+                "servos": {
+                    "Fuel Main": {
+                        "channel": 15,
+                        "armed": true,
+                        "angle": 120
+                    },
+                    "Ox Main": {
+                        "channel": 14,
+                        "armed": true,
+                        "angle": 120
+                    }
+                }
+            }
+        },
+        "0.5": {
+            "ActuatorBoard": {
+                "servos": {
+                    "Fuel Main": {
+                        "channel": 15,
+                        "armed": true,
+                        "angle": 180
+                    },
+                    "Ox Main": {
+                        "channel": 14,
+                        "armed": true,
+                        "angle": 180
+                    }
+                }
+            }
+        },
+        "5": {}
+    }
 }

@@ -19,11 +19,16 @@ class MachineStates(Enum):
     LAUNCH = 5
     HOVER = 6
 
+
 class StateMachine:
     def __init__(self):
         self.state = MachineStates.STARTTUP
+        self.hotfirecontroller = self.HotfireController()
+        self.changing_state = False
+
 
     def set_state(self, state):
+        self.changing_state = True
         if isinstance(state, MachineStates):
             self.state = state
         else:
@@ -34,6 +39,72 @@ class StateMachine:
 
     def __str__(self):
         return f"Current State: {self.state.name}"
+    
+    class HotfireController():
+        def __init__(self):
+            with open('hotfiresequence.json', 'r') as file:
+                sequencejson = json.load(file)
+
+            self.set_hotfire_sequence(sequencejson)
+            
+            with open('hotfiresequence.json', 'w') as file:
+                    json.dump(self.sequencejson, file, indent=4)
+
+        def set_hotfire_sequence(self, sequencejson):
+            self.sequencejson = sequencejson
+            with open('hotfiresequence.json', 'w') as file:
+                json.dump(self.sequencejson, file, indent=4)
+            
+            self.time_before_ignition = self.sequencejson["time_before_ignition"]
+            self.hotfire_safing_time = self.sequencejson["hotfire_safing_time"]
+            self.start_end_desiredstate = self.sequencejson["start_end_desiredstate"]
+            sequence = self.sequencejson["sequence"]
+            times = []
+            timestrs = []
+            for timestr, _ in sequence.items():
+                time = float(timestr)
+                times.append(time)
+                timestrs.append(timestr)
+            
+            self.sorted_times, self.sorted_timestr = (list(t) for t in zip(*sorted(zip(times, timestrs))))
+
+            self.hotfire_end_time = self.sorted_times[-1] + self.hotfire_safing_time
+
+        def is_hotfire_complete(self, time_since_statechange):
+            T = self.get_T(time_since_statechange)
+            #print(f"Hotfire complete check: T = {T}, hotfire_end_time = {self.hotfire_end_time}")
+            if T > self.hotfire_end_time:
+                return True
+            else:
+                return False
+
+        def get_T(self, time_since_statechange):
+            T = time_since_statechange - self.time_before_ignition
+            return T
+
+
+        def get_hotfire_sequence(self):
+            return self.sequencejson
+        
+        def get_hotfire_desiredstate(self, time_since_statechange):
+            T = self.get_T(time_since_statechange)
+            if T < self.sorted_times[0] or T > self.sorted_times[-1]:
+                desired_state = self.start_end_desiredstate
+            else:
+                time_index = 0
+                while T > self.sorted_times[time_index]:
+                    time_index += 1
+                desired_state = self.sequencejson["sequence"][self.sorted_timestr[time_index]]
+            
+            return desired_state #THIS A DICT OF BOARDS, WITH THEIR DESIRED STATES INSIDE
+        
+    def start_hotfire(self):
+        if self.state != MachineStates.IDLE:
+            return f"Cannot start hotfire from current state: {str(self.state)}"
+        self.set_state(MachineStates.HOTFIRE)
+        print("Hotfire sequence started")
+        return "Hotfire sequence started"
+
 
 class TimeKeeper:
     def __init__(self, name, cycle_time, debug_time=0.0):
@@ -75,7 +146,8 @@ class TimeKeeper:
         return self.cycle
 
 class SerialManager:
-    def __init__(self, port, baudrate, print_send=False, print_receive=False, emulator=False):
+    def __init__(self, board_name, port, baudrate, print_send=False, print_receive=False, emulator=False):
+        self.board_name = board_name
         self.emulator = emulator
         self.port = port
         self.baudrate = baudrate
@@ -108,7 +180,7 @@ class SerialManager:
                 url=self.port,
                 baudrate=self.baudrate
             )
-            print(f"SERIALMANAGER Serial port {self.port} opened at {self.baudrate} baud")
+            print(f"SERIALMANAGER Serial port {self.port} opened at {self.baudrate} baud for board {self.board_name}")
             
             # Start the background reading thread
             self.running = True
@@ -210,8 +282,8 @@ class SerialManager:
                         del self.read_buffer[send_id]
                         return response
                 if time.perf_counter() - start_time > timeout_time:
-                    print(f"SERIALMANAGER Timeout waiting for response with send_id {send_id}")
-                    return f"SERIALMANAGER Timeout waiting for response with send_id {send_id}"
+                    print(f"SERIALMANAGER Timeout waiting for response with send_id {send_id} for board {self.board_name}")
+                    return f"SERIALMANAGER Timeout waiting for response with send_id {send_id} for board {self.board_name}"
                 await asyncio.sleep(0.001)
         except Exception as e:
             print(f"SERIALMANAGER Send error: {e}")
@@ -291,6 +363,7 @@ class HardwareHandler:
                 if 'port' in serial_config and 'baudrate' in serial_config:
                     try:
                         serial_manager = SerialManager(
+                            board_name,
                             port=serial_config['port'],
                             baudrate=serial_config['baudrate'],
                             print_send=self.debug_prints,
@@ -491,14 +564,11 @@ class CommandProcessor:
         print("stop_task not implemented")
         return "stop_task not implemented"
     def get_hotfire_sequences(self, data):
-        print("get_hotfire_sequences not implemented")
-        return "get_hotfire_sequences not implemented"
+        return self.state_machine.hotfirecontroller.get_hotfire_sequence()
     def set_hotfire_sequences(self, data):
-        print("set_hotfire_sequences not implemented")
-        return "set_hotfire_sequences not implemented"
+        return self.state_machine.hotfirecontroller.set_hotfire_sequence(data)
     def start_hotfire_sequence(self, data):
-        print("start_hotfire_sequence not implemented")
-        return "start_hotfire_sequence not implemented"
+        return self.state_machine.start_hotfire()
     def abort_engine(self, data):
         print("abort_engine not implemented")
         return "abort_engine not implemented"
@@ -507,7 +577,14 @@ class CommandProcessor:
         return "fts not implemented"
 
     async def process_message(self, command):
-        message_json = json.loads(command)
+        try:
+            message_json = json.loads(command)
+        except json.JSONDecodeError:
+            print(f"Invalid JSON format: {command}")
+            return "Invalid JSON format"
+        if "command" not in message_json or "data" not in message_json:
+            print(f"No command found: {command}")
+            return "No command found"
         command = message_json["command"]
         data = message_json["data"]
         if command in self.commands:
@@ -720,20 +797,23 @@ async def main(windows=False, emulator=False):
 
             current_state = state_machine.get_state()
 
+            if state_machine.changing_state:
+                main_loop_time_keeper.statechange()     
+                state_machine.changing_state = False
 
 
+            # if(main_loop_time_keeper.get_cycle() % 100 == 0):
+            #     # print(len(asyncio.all_tasks()))
+            #     for board in hardware_handler.boards:
+            #         #print(json.dumps(board.state, indent=4))
+            #         pass
 
-            if(main_loop_time_keeper.get_cycle() % 100 == 0):
-                # print(len(asyncio.all_tasks()))
-                for board in hardware_handler.boards:
-                    #print(json.dumps(board.state, indent=4))
-                    pass
+
             # Perform actions based on current state
             if current_state == MachineStates.STARTTUP:
                 if main_loop_time_keeper.time_since_statechange() > 5:
                     state_machine.set_state(MachineStates.IDLE)
                     recurring_taskhandler.set_tasks_idle()
-                    main_loop_time_keeper.statechange()
                     command_processor.disarm_all(None)
                     print("State changed to IDLE")
             
@@ -750,7 +830,25 @@ async def main(windows=False, emulator=False):
                 pass
 
             elif current_state == MachineStates.HOTFIRE:
-                pass
+                if main_loop_time_keeper.cycle == 0:
+                    recurring_taskhandler.set_tasks_active()
+
+                time_since_statechange = main_loop_time_keeper.time_since_statechange()
+
+                T = state_machine.hotfirecontroller.get_T(time_since_statechange)
+                if (main_loop_time_keeper.get_cycle() % 100 == 0):
+                    print(f"T{T:.2f}s")
+                board_desiredstates = state_machine.hotfirecontroller.get_hotfire_desiredstate(time_since_statechange)
+                for board_name, desired_state in board_desiredstates.items():
+                    hardware_handler.update_board_desired_state(board_name, desired_state)
+                    
+                if state_machine.hotfirecontroller.is_hotfire_complete(time_since_statechange):
+                    print(f"HOTFIRE COMPLETE at T{T:.2f}s")
+                    state_machine.set_state(MachineStates.IDLE)
+                    recurring_taskhandler.set_tasks_idle()
+                    main_loop_time_keeper.statechange()
+                    command_processor.disarm_all(None)
+                    print("State changed to IDLE")
                 
             elif current_state == MachineStates.LAUNCH:
                 pass
@@ -785,7 +883,8 @@ if __name__ == "__main__":
     - hotfires  
     - UDP and serial json logging
     Lower priority
-    - only send actuator commands if deployment power is on
+    - have board name be the key for each board instead of a property in board list
+    - turn lists into dicts
     - Only send json through if it exists in the hardware configuration, unless unsafe=true
 
 
