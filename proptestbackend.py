@@ -35,6 +35,45 @@ class StateMachine:
     def __str__(self):
         return f"Current State: {self.state.name}"
 
+class TimeKeeper:
+    def __init__(self, name, cycle_time, debug_time=0.0):
+        self.name = name
+        self.debug_time = debug_time
+        self.cycle_time = cycle_time
+        self.start_time = time.perf_counter()
+        self.statechange_time = self.start_time
+        self.cycle = 0
+
+    def set_interval(self, cycle_time):
+        self.cycle_time = cycle_time
+        self.cycle = 0
+        self.statechange_time = time.perf_counter()
+
+    def cycle_start(self):
+        self.cycle_starttime = time.perf_counter()
+        if self.debug_time > 0:
+            if(self.cycle % (self.debug_time / self.cycle_time) == 0):
+                print(f"TimeKeeper {self.name} is at cycle {self.cycle} at {time.perf_counter() - self.start_time:.5f} seconds")
+
+    def time_since_start(self) -> float:
+        return time.perf_counter() - self.start_time
+    
+    def statechange(self) -> None:
+        self.cycle = 0
+        self.statechange_time = time.perf_counter()
+
+    def time_since_statechange(self) -> float:
+        return time.perf_counter() - self.statechange_time
+
+    async def cycle_end(self):
+        self.cycle += 1
+        next_time = self.statechange_time + (self.cycle + 1) * self.cycle_time
+        await asyncio.sleep(max(0, next_time - time.perf_counter()))  # Sleep for the remaining cycle time
+
+
+    def get_cycle(self):
+        return self.cycle
+
 class SerialManager:
     def __init__(self, port, baudrate, print_send=False, print_receive=False, emulator=False):
         self.emulator = emulator
@@ -196,11 +235,17 @@ class SerialManager:
             print(f"SERIALMANAGER Serial port {self.port} closed")
 
 class Board:
-    def __init__(self, name: str, serialmanager: SerialManager, state: dict, config: dict):
+    def __init__(self, name: str, serialmanager: SerialManager, state: dict, config: dict, desired_state: dict=None):
         self.name: str = name
         self.serialmanager: SerialManager = serialmanager
         self.state: dict = state
         self.config: dict = config
+        self.desired_state: dict = desired_state if desired_state is not None else {}
+        self.is_actuator: bool = config.get('is_actuator', False)
+
+        #print(f"Board {self.name}'s state: {json.dumps(self.state, indent=4)}")
+        #print(f"Board {self.name}'s desired_state: {json.dumps(self.desired_state, indent=4)}")
+
 
 class HardwareHandler:
     def __init__(self, emulator: bool = False, debug_prints: bool = False):
@@ -209,9 +254,9 @@ class HardwareHandler:
         self.boards: list[Board] = []
 
         self.state_defaults: dict = {
-            "servos": {"angle": None},
-            "solenoids": {"armed": False, "powered": False},
-            "pyros": {"armed": False, "powered": False},
+            "servos": {"armed": None, "angle": None},
+            "solenoids": {"armed": None, "powered": None},
+            "pyros": {"armed": None, "powered": None},
             "pts": {"p": None},
             "tcs": {"t": None},
             "loadcells": {"force": None},
@@ -264,13 +309,31 @@ class HardwareHandler:
                         state[hw_type] = {}
                         for item_name, item_data in board_config[hw_type].items():
                             state[hw_type][item_name] = {**self.state_defaults[hw_type].copy(), **item_data}
-
-                self.boards.append(Board(board_name, serial_manager, state, board_config))
+                is_actuator = board_config.get('is_actuator', False)
+                if is_actuator:
+                    desired_state = state.copy()
+                    if "servos" in board_config:
+                        desired_state["servos"] = {}
+                        for servo_name, servo_data in board_config["servos"].items():
+                            desired_state["servos"][servo_name] = {"channel": servo_data['channel'], "armed": False}
+                            if 'safe_angle' in servo_data:
+                                desired_state["servos"][servo_name]["armed"] = True
+                                desired_state["servos"][servo_name]["angle"] = servo_data['safe_angle']
+                    self.boards.append(Board(board_name, serial_manager, state, board_config, desired_state))
+                else:
+                    self.boards.append(Board(board_name, serial_manager, state, board_config))
         else:
             print("No boards found in configuration or invalid board configuration")
     
+    def get_board(self, board_name):
+        """Get a board by name"""
+        for board in self.boards:
+            if board.name == board_name:
+                return board
+        return None
+
     def update_board_state(self, board_name, new_state):
-        board = next((b for b in self.boards if b.name == board_name), None)
+        board = self.get_board(board_name)
         if not board:
             print(f"Board {board_name} not found")
             return
@@ -282,41 +345,71 @@ class HardwareHandler:
                         for key, value in item_data.items():
                             board.state[hw_type][item_name][key] = value
 
-    def generate_command(self, command:str, board_name:str, desired_state:dict) -> str:
-        return json.dumps({
+    def generate_command(self, command:str, board_name:str, desired_state:dict) -> dict:
+        return {
             "command": command,
             "data":
             {
                 "board_name": board_name,
                 "message": desired_state
             }
-        })
+        }
     def get_startup_tasks(self, command_processor):
         """Get startup tasks from the hardware configuration"""
         startup_tasks = []
-        if 'boards' not in self.config:
-            print("No boards found in configuration")
-            return startup_tasks
-            
-        for board_config in self.config['boards']:
-            board_name = board_config['board_name']
-            message = {"timestamp": 0, board_name: {}}
-
-            for hw_type in self.hardware_types:
-                if hw_type in board_config:
-                    message[board_name][hw_type] = {}
-                    for item_name, item_data in board_config[hw_type].items():
-                        message[board_name][hw_type][item_name] = {"channel": item_data['channel']}
-                        if hw_type == "servos":
-                            message[board_name]["servos"][item_name]["armed"] = False
-                            if 'safe_angle' in item_data:
-                                message[board_name]["servos"][item_name]["armed"] = True
-                                message[board_name]["servos"][item_name]["angle"] = item_data['safe_angle']
-            startup_command = self.generate_command("send_receive", board_name, message)
+        for board in self.boards:
+            board_name = board.name
+            board_config = board.config
+            if not board:
+                print(f"Board {board_name} not found in config loaded boards")
+                continue
+            if not board.is_actuator:
+                message = {"timestamp": 0}
+                for hw_type in self.hardware_types:
+                    if hw_type in board.state:
+                        message[hw_type] = {}
+                        for item_name, item_data in board.state[hw_type].items():
+                            message[hw_type][item_name] = {"channel": item_data['channel']}
+                startup_command = self.generate_command("send_receive", board_name, message)
+            else:
+                startup_command = self.generate_command("send_receive", board_name, {"timestamp":0, **board.desired_state})
             startup_tasks.append(RecurringTask(command_processor, f"{board_name}_MainTask", board_config['active_interval'], startup_command))
         return startup_tasks
     
-
+    def disarm_all(self):
+        for board in self.boards:
+            if board.is_actuator:
+                # Update the desired state to disarm everything
+                if "servos" in board.desired_state:
+                    for servo, _ in board.desired_state["servos"].items():
+                        board.desired_state["servos"][servo]["armed"] = False
+                
+                if "solenoids" in board.desired_state:
+                    for solenoid, _ in board.desired_state["solenoids"].items():
+                        board.desired_state["solenoids"][solenoid]["armed"] = False
+                
+                if "pyros" in board.desired_state:
+                    for pyro, _ in board.desired_state["pyros"].items():
+                        board.desired_state["pyros"][pyro]["armed"] = False
+        
+        return "All actuators disarmed"
+    
+    #HAVE A THOROUGH LOOK AT THIS
+    def update_board_desired_state(self, board_name, new_desired_state):
+        """Update a board's desired state"""
+        board = self.get_board(board_name)
+        if not board:
+            print(f"Board {board_name} not found")
+            return False
+        
+        for hw_type in self.hardware_types:
+            if hw_type in new_desired_state and hw_type in board.desired_state:
+                for item_name, item_data in new_desired_state[hw_type].items():
+                    if item_name in board.state[hw_type]:
+                        for key, value in item_data.items():
+                            board.desired_state[hw_type][item_name][key] = value
+        
+        return True
     def unload_hardware(self):
         # Close all serial connections
         for board in self.boards:
@@ -348,7 +441,7 @@ class HardwareHandler:
         
     async def send_receive(self, board_name, message):
         """Send a message to a specific board and receive the response"""
-        board = next((b for b in self.boards if b.name == board_name), None)
+        board = self.get_board(board_name)
         if not board:
             print(f"Board {board_name} not found")
             return f"Board {board_name} not found"
@@ -415,18 +508,21 @@ class CommandProcessor:
         
 
 class RecurringTask:
-    def __init__(self, command_processor: CommandProcessor, name: str, interval: float, command: str):
+    def __init__(self, command_processor: CommandProcessor, name: str, interval: float, command: dict):
         self.command_processor = command_processor
         self.name = name
         self.interval = interval
         self.command = command
-        self.timekeeper = TimeKeeper(self.name,cycle_time=interval)
+        self.timekeeper = TimeKeeper(self.name, cycle_time=interval)
         self.running = True
     async def start_task(self):
         print(f"Starting task: {self.name} with interval {self.interval}")
+        #print(json.dumps(self.command, indent=4))
         while self.running:
             self.timekeeper.cycle_start()
-            asyncio.create_task(self.command_processor.process_message(self.command))
+            # if(self.command["data"]["board_name"] == "ActuatorBoard"):
+            #     print(f"Sending command to actuator board: {json.dumps(self.command,indent=4)}")
+            asyncio.create_task(self.command_processor.process_message(json.dumps(self.command)))
             await self.timekeeper.cycle_end()
     def set_interval(self, interval: float):
         self.interval = interval
@@ -551,45 +647,6 @@ class SignalHandler:
         signal.signal(signal.SIGTSTP, signal.SIG_DFL)
         os.kill(os.getpid(), signal.SIGTSTP)
 
-class TimeKeeper:
-    def __init__(self, name, cycle_time, debug_time=0.0):
-        self.name = name
-        self.debug_time = debug_time
-        self.cycle_time = cycle_time
-        self.start_time = time.perf_counter()
-        self.statechange_time = self.start_time
-        self.cycle = 0
-
-    def set_interval(self, cycle_time):
-        self.cycle_time = cycle_time
-        self.cycle = 0
-        self.statechange_time = time.perf_counter()
-
-    def cycle_start(self):
-        self.cycle_starttime = time.perf_counter()
-        if self.debug_time > 0:
-            if(self.cycle % (self.debug_time / self.cycle_time) == 0):
-                print(f"TimeKeeper {self.name} is at cycle {self.cycle} at {time.perf_counter() - self.start_time:.5f} seconds")
-
-    def time_since_start(self) -> float:
-        return time.perf_counter() - self.start_time
-    
-    def statechange(self) -> None:
-        self.cycle = 0
-        self.statechange_time = time.perf_counter()
-
-    def time_since_statechange(self) -> float:
-        return time.perf_counter() - self.statechange_time
-
-    async def cycle_end(self):
-        self.cycle += 1
-        next_time = self.statechange_time + (self.cycle + 1) * self.cycle_time
-        await asyncio.sleep(max(0, next_time - time.perf_counter()))  # Sleep for the remaining cycle time
-
-
-    def get_cycle(self):
-        return self.cycle
-
 
 
 async def main(windows=False, emulator=False):
@@ -615,6 +672,10 @@ async def main(windows=False, emulator=False):
             main_loop_time_keeper.cycle_start()
 
             current_state = state_machine.get_state()
+
+
+
+
             if(main_loop_time_keeper.get_cycle() % 100 == 0):
                 # print(len(asyncio.all_tasks()))
                 for board in hardware_handler.boards:
@@ -626,6 +687,7 @@ async def main(windows=False, emulator=False):
                     state_machine.set_state(MachineStates.IDLE)
                     recurring_taskhandler.set_tasks_idle()
                     main_loop_time_keeper.statechange()
+                    command_processor.disarm_all(None)
                     print("State changed to IDLE")
             
             elif current_state == MachineStates.IDLE:
@@ -669,19 +731,18 @@ if __name__ == "__main__":
         print("Running on Windows - standard event loop will be used")
         asyncio.run(main(windows=True))
     #syncio.run(main(emulator=True))
-    
-'''
-TODO
-- Logging of each state to a csv file (Ability to name it after a test)
-- Auto starting and auto requesting of data
 
-- UDP and serial json logging
-Lower priority
-- only send actuator commands if deployment power is on
-- Only send json through if it exists in the hardware configuration, unless unsafe=true
+    '''
+    TODO
+    - Logging of each state to a csv file (Ability to name it after a test)
+    - Auto starting and auto requesting of data
+
+    - UDP and serial json logging
+    Lower priority
+    - only send actuator commands if deployment power is on
+    - Only send json through if it exists in the hardware configuration, unless unsafe=true
 
 
-- hardware json to gui
+    - hardware json to gui
 
-'''
-
+    '''

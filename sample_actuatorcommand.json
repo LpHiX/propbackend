@@ -4,24 +4,25 @@
         "board_name": "ActuatorBoard",
         "message": {
             "timestamp": 0,
-            "source": "RP4",
-            "destination": "ActuatorBoard",
-            "servos": [
-                {
+            "servos": {
+                "Fuel Main": {
                     "channel": 15,
                     "armed": true,
-                    "pwm": 1550,
-                    "name": "Servo1"
-                }
-            ],
-            "solenoids": [
-                {
-                    "gpio": 40,
+                    "angle": 0
+                },
+                "Ox Vent": {
+                    "channel": 14,
                     "armed": true,
-                    "powered": false,
-                    "name": "LED"
+                    "angle": 0
                 }
-            ]
+            },
+            "solenoids": {
+                "LED":{                    
+                    "channel": 40,
+                    "armed": true,
+                    "powered": false
+                }
+            }
         }
     }
 }

@@ -1,0 +1,21 @@
+{
+    "servos": {
+        "Fuel Main": {
+            "channel": 15,
+            "armed": true,
+            "angle": 0
+        },
+        "Ox Vent": {
+            "channel": 14,
+            "armed": null,
+            "angle": null
+        }
+    },
+    "solenoids": {
+        "LED":{                    
+            "channel": 40,
+            "armed": null,
+            "powered": null
+        }
+    }
+}

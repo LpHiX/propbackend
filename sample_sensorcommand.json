@@ -1,0 +1,22 @@
+{
+    "command": "send_receive",
+    "data": {
+        "board_name": "Sensorboard0",
+        "message": {
+            "timestamp": 0,
+            "pts": {
+                "Fuel Inj": {
+                    "channel": 15
+                },
+                "Ox Tank": {
+                    "channel": 14
+                }
+            },
+            "gps": {
+                "gps0":{                    
+                    "channel": 10
+                }
+            }
+        }
+    }
+}
