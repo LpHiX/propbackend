@@ -370,9 +370,9 @@ class HardwareHandler:
                         message[hw_type] = {}
                         for item_name, item_data in board.state[hw_type].items():
                             message[hw_type][item_name] = {"channel": item_data['channel']}
-                startup_command = self.generate_command("send_receive", board_name, message)
+                startup_command = self.generate_command("send receive", board_name, message)
             else:
-                startup_command = self.generate_command("send_receive", board_name, {"timestamp":0, **board.desired_state})
+                startup_command = self.generate_command("send receive", board_name, {"timestamp":0, **board.desired_state})
             startup_tasks.append(RecurringTask(command_processor, f"{board_name}_MainTask", board_config['active_interval'], startup_command))
         return startup_tasks
     
@@ -466,10 +466,11 @@ class CommandProcessor:
             "get hardware json": self.get_hardware_json,
             "set hardware json": self.set_hardware_json,
             "reload hardware json": self.reload_hardware_json,
-            "send_receive": self.send_receive,
+            "send receive": self.send_receive,
             "set state": self.state_machine.set_state,
             "get state": self.state_machine.get_state,
             "get startup tasks": self.get_startup_tasks,
+            "update desired state": self.update_desired_state,
         }
 
     async def process_message(self, command):
@@ -477,11 +478,24 @@ class CommandProcessor:
         command = message_json["command"]
         data = message_json["data"]
         if command in self.commands:
-            response = await self.commands[command](data)
+            func = self.commands[command]
+            if asyncio.iscoroutinefunction(func):
+                response = await self.commands[command](data)
+            else:
+                response = func(data)
             return response
         else:
+            print(f"Unknown command: {command}")
             return f"Unknown command: {command}"
         
+    def update_desired_state(self, data):
+        print("command recieved")
+        board_name = data["board_name"]
+        new_desired_state = data["message"]
+        if self.hardware_handler.update_board_desired_state(board_name, new_desired_state):
+            return f"Desired state for board {board_name} updated successfully"
+        else:
+            return f"Failed to update desired state for board {board_name}"
 
     def get_hardware_json(self, _):
         return json.dumps(self.hardware_handler.get_config())
@@ -521,7 +535,7 @@ class RecurringTask:
         while self.running:
             self.timekeeper.cycle_start()
             # if(self.command["data"]["board_name"] == "ActuatorBoard"):
-            #     print(f"Sending command to actuator board: {json.dumps(self.command,indent=4)}")
+            #     print(f"Sending command to actuator board: {json.dumps(self.command)}")
             asyncio.create_task(self.command_processor.process_message(json.dumps(self.command)))
             await self.timekeeper.cycle_end()
     def set_interval(self, interval: float):

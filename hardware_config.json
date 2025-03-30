@@ -2,8 +2,8 @@
     "boards": [
         {
             "board_name": "ActuatorBoard",
-            "active_interval": 0.05,
-            "idle_interval": 0.1,
+            "active_interval": 1,
+            "idle_interval": 1,
             "is_actuator": true,
             "serial": {
                 "port": "/dev/ttyS0",

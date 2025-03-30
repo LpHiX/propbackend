@@ -1,5 +1,5 @@
 {
-    "command": "send_receive",
+    "command": "send receive",
     "data": {
         "board_name": "ActuatorBoard",
         "message": {
