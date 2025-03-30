@@ -471,7 +471,26 @@ class CommandProcessor:
             "get state": self.state_machine.get_state,
             "get startup tasks": self.get_startup_tasks,
             "update desired state": self.update_desired_state,
+            "get running tasks": self.get_running_tasks,
+            "add and run task": self.add_and_run_task,
+            "stop task": self.stop_task,
+            "disarm all": self.disarm_all,
+            "get hotfire sequence": self.get_hotfire_sequences,
+            "set hotfire sequence": self.set_hotfire_sequences,
+            "start hotfire sequence": None,
+            "abort engine": None,
+            "fts": None,
         }
+    def get_running_tasks(self, _):
+        raise NotImplementedError("get_running_tasks not implemented")
+    def add_and_run_task(self, data):
+        raise NotImplementedError("add_and_run_task not implemented")
+    def stop_task(self, data):
+        raise NotImplementedError("stop_task not implemented")
+    def get_hotfire_sequences(self, data):
+        raise NotImplementedError("get_hotfire_sequences not implemented")
+    def set_hotfire_sequences(self, data):
+        raise NotImplementedError("set_hotfire_sequences not implemented")
 
     async def process_message(self, command):
         message_json = json.loads(command)
