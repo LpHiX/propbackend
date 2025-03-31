@@ -8,6 +8,8 @@ import asyncio
 import serial_asyncio
 import os
 import platform
+import csv
+from datetime import datetime
 
 
 class MachineStates(Enum):
@@ -318,7 +320,6 @@ class Board:
         #print(f"Board {self.name}'s state: {json.dumps(self.state, indent=4)}")
         #print(f"Board {self.name}'s desired_state: {json.dumps(self.desired_state, indent=4)}")
 
-
 class HardwareHandler:
     def __init__(self, emulator: bool = False, debug_prints: bool = False):
         self.emulator: bool = emulator
@@ -530,6 +531,76 @@ class HardwareHandler:
         except json.JSONDecodeError:
             return response
 
+class BoardStateLogger:
+    def __init__(self, name, hardware_handler: HardwareHandler, log_dir="/mnt/proppi_data/logs"):
+        self.log_dir = log_dir
+        os.makedirs(log_dir, exist_ok=True)
+
+        self.current_csv = None
+        self.csv_writer = None
+        self.name = name
+    
+        self.file_name = f"test_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{self.name}.csv"
+        self.csv_path = f"{self.log_dir}/{self.file_name}"
+        self.current_csv = open(self.csv_path, 'w', newline='')
+        self.csv_writer = csv.writer(self.current_csv)
+        self.current_csv.write(f"#Test started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        self.start_time = time.perf_counter()
+
+        self.state_defaults = hardware_handler.state_defaults
+    
+    def write_headers(self, boards: list[Board]):
+        headers = ["timestamp"]
+        for board in boards:
+            #print(json.dumps(board.state, indent=4))
+            for hw_type, items in board.state.items():
+                if not isinstance(items, dict):
+                    continue
+                for item_name, _ in items.items():
+                    for state_name in self.state_defaults[hw_type].keys():
+                        headers.append(f"{board.name}_{hw_type}_{item_name}_{state_name}")
+            for hw_type, items in board.desired_state.items():
+                if not isinstance(items, dict):
+                    continue
+                for item_name, _ in items.items():
+                    for state_name in self.state_defaults[hw_type].keys():
+                        headers.append(f"{board.name}_{hw_type}_{item_name}_{state_name}_desiredstate")
+        
+        self.csv_writer.writerow(headers)
+
+    def write_data(self, boards: list[Board]):
+        data = [time.perf_counter() - self.start_time]
+        for board in boards:
+            for hw_type, items in board.state.items():
+                if not isinstance(items, dict):
+                    continue
+                for item_name, item_data in items.items():
+                    if hw_type in self.state_defaults:
+                        for state_name in self.state_defaults[hw_type].keys():
+                            #print(f"{board.name}_{hw_type}_{item_name}_{state_name}")
+                            data.append(item_data[state_name])
+            for hw_type, items in board.desired_state.items():
+                if not isinstance(items, dict):
+                    continue
+                if hw_type in self.state_defaults:
+                    for item_name, item_data in items.items():
+                        #print(f"{board.name}_{hw_type}_{item_name} has item data {item_data}")
+                        for state_name in self.state_defaults[hw_type].keys():
+                            #print(f"{board.name}_{hw_type}_{item_name}_{state_name}")
+                            if state_name in item_data:
+                                data.append(item_data[state_name])
+                            else:
+                                data.append(None)
+
+        self.csv_writer.writerow(data)
+        self.current_csv.flush()
+
+    def close(self):
+        if self.current_csv:
+            self.current_csv.close()
+            print(f"BoardStateLogger: Closed CSV file {self.file_name}")
+        self.current_csv = None
+        self.csv_writer = None
 
 class CommandProcessor:
     def __init__(self, state_machine: StateMachine, hardware_handler: HardwareHandler):
@@ -553,28 +624,31 @@ class CommandProcessor:
             "start hotfire sequence": self.start_hotfire_sequence,
             "abort engine": self.abort_engine,
             "fts": self.fts,
+            "get boards states": self.get_boards_states,
+            "get boards desired states": self.get_boards_desired_states,
         }
-    def get_running_tasks(self, _):
-        print("get_running_tasks not implemented")
-        return "get_running_tasks not implemented"
-    def add_and_run_task(self, data):
-        print("add_and_run_task not implemented")
-        return "add_and_run_task not implemented"
-    def stop_task(self, data):
-        print("stop_task not implemented")
-        return "stop_task not implemented"
+
     def get_hotfire_sequences(self, data):
         return self.state_machine.hotfirecontroller.get_hotfire_sequence()
+    
     def set_hotfire_sequences(self, data):
         return self.state_machine.hotfirecontroller.set_hotfire_sequence(data)
+    
     def start_hotfire_sequence(self, data):
         return self.state_machine.start_hotfire()
-    def abort_engine(self, data):
-        print("abort_engine not implemented")
-        return "abort_engine not implemented"
-    def fts(self, data):
-        print("fts not implemented")
-        return "fts not implemented"
+
+    def get_boards_states(self, _):
+        states = {}
+        for board in self.hardware_handler.boards:
+            states[board.name] = board.state
+        return json.dumps(states, indent=4)
+
+    def get_boards_desired_states(self, _):
+        desired_states = {}
+        for board in self.hardware_handler.boards:
+            desired_states[board.name] = board.desired_state
+        return json.dumps(desired_states, indent=4)
+    
 
     async def process_message(self, command):
         try:
@@ -629,6 +703,22 @@ class CommandProcessor:
 
     def disarm_all(self, _) -> str:
         return self.hardware_handler.disarm_all()
+
+    def get_running_tasks(self, _):
+        print("get_running_tasks not implemented")
+        return "get_running_tasks not implemented"
+    def add_and_run_task(self, data):
+        print("add_and_run_task not implemented")
+        return "add_and_run_task not implemented"
+    def stop_task(self, data):
+        print("stop_task not implemented")
+        return "stop_task not implemented"
+    def abort_engine(self, data):
+        print("abort_engine not implemented")
+        return "abort_engine not implemented"
+    def fts(self, data):
+        print("fts not implemented")
+        return "fts not implemented"
         
 
 class RecurringTask:
@@ -790,6 +880,10 @@ async def main(windows=False, emulator=False):
 
 
     main_loop_time_keeper = TimeKeeper(name="MainLoop", cycle_time=0.01, debug_time=1.0)
+    
+    main_loop_logger = BoardStateLogger("MainLoop", hardware_handler)
+    main_loop_logger.write_headers(hardware_handler.boards)
+
 
     try:
         while True:
@@ -801,12 +895,12 @@ async def main(windows=False, emulator=False):
                 main_loop_time_keeper.statechange()     
                 state_machine.changing_state = False
 
-
             # if(main_loop_time_keeper.get_cycle() % 100 == 0):
             #     # print(len(asyncio.all_tasks()))
             #     for board in hardware_handler.boards:
             #         #print(json.dumps(board.state, indent=4))
             #         pass
+
 
 
             # Perform actions based on current state
@@ -832,7 +926,10 @@ async def main(windows=False, emulator=False):
             elif current_state == MachineStates.HOTFIRE:
                 if main_loop_time_keeper.cycle == 0:
                     recurring_taskhandler.set_tasks_active()
+                    hotfire_logger = BoardStateLogger("HotfireLog", hardware_handler)
+                    hotfire_logger.write_headers(hardware_handler.boards)
 
+                
                 time_since_statechange = main_loop_time_keeper.time_since_statechange()
 
                 T = state_machine.hotfirecontroller.get_T(time_since_statechange)
@@ -841,9 +938,12 @@ async def main(windows=False, emulator=False):
                 board_desiredstates = state_machine.hotfirecontroller.get_hotfire_desiredstate(time_since_statechange)
                 for board_name, desired_state in board_desiredstates.items():
                     hardware_handler.update_board_desired_state(board_name, desired_state)
-                    
+                
+                hotfire_logger.write_data(hardware_handler.boards)
+
                 if state_machine.hotfirecontroller.is_hotfire_complete(time_since_statechange):
                     print(f"HOTFIRE COMPLETE at T{T:.2f}s")
+                    hotfire_logger.close()
                     state_machine.set_state(MachineStates.IDLE)
                     recurring_taskhandler.set_tasks_idle()
                     main_loop_time_keeper.statechange()
@@ -857,6 +957,8 @@ async def main(windows=False, emulator=False):
                 pass
             
             # Sleep to avoid excessive CPU usage
+            if main_loop_time_keeper.cycle % 10 == 0:
+                main_loop_logger.write_data(hardware_handler.boards)
             await main_loop_time_keeper.cycle_end()
 
     except KeyboardInterrupt:
