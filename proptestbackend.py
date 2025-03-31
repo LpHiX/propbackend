@@ -325,22 +325,8 @@ class HardwareHandler:
         self.emulator: bool = emulator
         self.debug_prints: bool = debug_prints
         self.boards: list[Board] = []
-
-        self.state_defaults: dict = {
-            "servos": {"armed": None, "angle": None},
-            "solenoids": {"armed": None, "powered": None},
-            "pyros": {"armed": None, "powered": None},
-            "pts": {"p": None},
-            "tcs": {"t": None},
-            "loadcells": {"force": None},
-            "imus": {"a_x": None, "a_y": None, "a_z": None, "g_x": None, "g_y": None, "g_z": None},
-            "gps": {"la": None, "lo": None, "alt": None},
-            "mags": {"m_x": None, "m_y": None, "m_z": None},
-            "baros": {"alt": None},
-            #"encoders": {"po": None},
-            "voltage": {"v": None}
-        }
-        self.hardware_types = list(self.state_defaults.keys())
+        self.state_defaults: dict = {}
+        self.hardware_types: list[str] = []
 
         with open('hardware_config.json', 'r') as file:
             self.config = json.load(file)
@@ -356,6 +342,11 @@ class HardwareHandler:
         if 'boards' not in self.config:
             print("No boards found in configuration, json error")
             return
+        if 'state_defaults' not in self.config:
+            print("No state defaults found in configuration, json error")
+            return
+        self.state_defaults: dict = self.config['state_defaults']
+        self.hardware_types = list(self.state_defaults.keys())
         
         for board_name, board_config in self.config['boards'].items():
             serial_config = board_config['serial']
@@ -468,7 +459,6 @@ class HardwareHandler:
         
         return "All actuators disarmed"
     
-    #HAVE A THOROUGH LOOK AT THIS
     def update_board_desired_state(self, board_name, new_desired_state):
         """Update a board's desired state"""
         board = self.get_board(board_name)
@@ -476,14 +466,18 @@ class HardwareHandler:
             print(f"Board {board_name} not found")
             return False
         
+        for hw_type, _ in new_desired_state.items():
+            if hw_type not in self.hardware_types:
+                print(f"Hardware type \'{hw_type}\' not recognized")
+                return f"Hardware type \'{hw_type}\' not recognized"
+
         for hw_type in self.hardware_types:
             if hw_type in new_desired_state and hw_type in board.desired_state:
                 for item_name, item_data in new_desired_state[hw_type].items():
                     if item_name in board.state[hw_type]:
                         for key, value in item_data.items():
                             board.desired_state[hw_type][item_name][key] = value
-        
-        return True
+        return "Desired state updated successfully"
     def unload_hardware(self):
         # Close all serial connections
         for board in self.boards:
@@ -678,10 +672,7 @@ class CommandProcessor:
         print("command recieved")
         board_name = data["board_name"]
         new_desired_state = data["message"]
-        if self.hardware_handler.update_board_desired_state(board_name, new_desired_state):
-            return f"Desired state for board {board_name} updated successfully"
-        else:
-            return f"Failed to update desired state for board {board_name}"
+        return self.hardware_handler.update_board_desired_state(board_name, new_desired_state)
 
     def get_hardware_json(self, _):
         return json.dumps(self.hardware_handler.get_config())
@@ -874,7 +865,7 @@ async def main(windows=False, emulator=False):
     await hardware_handler.initialize()
 
     command_processor = CommandProcessor(state_machine, hardware_handler)
-    udp_server = UDPServer(command_processor, print_send=True, print_receive=True)
+    udp_server = UDPServer(command_processor, print_send=False, print_receive=False)
     signal_handler = SignalHandler(udp_server, windows) #To handle system interrupts
     
     print("Startup Complete, waiting for commands")

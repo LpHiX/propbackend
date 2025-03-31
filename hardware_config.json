@@ -1,8 +1,8 @@
 {
     "boards": {
         "ActuatorBoard": {
-            "active_interval": 0.15,
-            "idle_interval": 1,
+            "active_interval": 0.05,
+            "idle_interval": 0.1,
             "is_actuator": true,
             "serial": {
                 "port": "/dev/ttyS0",
@@ -68,7 +68,59 @@
                 "GPS": {
                     "channel": 2
                 }
+            },
+            "imus": {
+                "IMU": {
+                    "channel": 3
+                }
             }
+        }
+    },
+    "state_defaults": {
+        "servos": {
+            "armed": null,
+            "angle": null
+        },
+        "solenoids": {
+            "armed": null,
+            "powered": null
+        },
+        "pyros": {
+            "armed": null,
+            "powered": null
+        },
+        "pts": {
+            "p": null
+        },
+        "tcs": {
+            "t": null
+        },
+        "loadcells": {
+            "force": null
+        },
+        "imus": {
+            "a_x": null,
+            "a_y": null,
+            "a_z": null,
+            "g_x": null,
+            "g_y": null,
+            "g_z": null
+        },
+        "gps": {
+            "la": null,
+            "lo": null,
+            "alt": null
+        },
+        "mags": {
+            "m_x": null,
+            "m_y": null,
+            "m_z": null
+        },
+        "baros": {
+            "alt": null
+        },
+        "voltage": {
+            "v": null
         }
     }
 }
