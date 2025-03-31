@@ -353,51 +353,51 @@ class HardwareHandler:
     
     async def load_hardware(self):
         # Initialize serial managers for each board in the configuration
-        if 'boards' in self.config:
-            for board_config in self.config['boards']:
-                board_name = board_config['board_name']
-                serial_config = board_config['serial']
+        if 'boards' not in self.config:
+            print("No boards found in configuration, json error")
+            return
+        
+        for board_name, board_config in self.config['boards'].items():
+            serial_config = board_config['serial']
 
-                serial_manager = None
-                state = {"updated": False}
+            serial_manager = None
+            state = {"updated": False}
 
-                if 'port' in serial_config and 'baudrate' in serial_config:
-                    try:
-                        serial_manager = SerialManager(
-                            board_name,
-                            port=serial_config['port'],
-                            baudrate=serial_config['baudrate'],
-                            print_send=self.debug_prints,
-                            print_receive=self.debug_prints,
-                            emulator=self.emulator
-                        )
-                        if await serial_manager.initialize():                        
-                            print(f"Initialized serial connection for board: {board_name}")
-                    except Exception as e:
-                        print(f"Failed to initialize serial for board {board_name}: {e}")
-                else:
-                    print(f"Board {board_name} is missing port or baudrate configuration")
+            if 'port' in serial_config and 'baudrate' in serial_config:
+                try:
+                    serial_manager = SerialManager(
+                        board_name,
+                        port=serial_config['port'],
+                        baudrate=serial_config['baudrate'],
+                        print_send=self.debug_prints,
+                        print_receive=self.debug_prints,
+                        emulator=self.emulator
+                    )
+                    if await serial_manager.initialize():                        
+                        print(f"Initialized serial connection for board: {board_name}")
+                except Exception as e:
+                    print(f"Failed to initialize serial for board {board_name}: {e}")
+            else:
+                print(f"Board {board_name} is missing port or baudrate configuration")
 
-                for hw_type in self.hardware_types:
-                    if hw_type in board_config:
-                        state[hw_type] = {}
-                        for item_name, item_data in board_config[hw_type].items():
-                            state[hw_type][item_name] = {**self.state_defaults[hw_type].copy(), **item_data}
-                is_actuator = board_config.get('is_actuator', False)
-                if is_actuator:
-                    desired_state = state.copy()
-                    if "servos" in board_config:
-                        desired_state["servos"] = {}
-                        for servo_name, servo_data in board_config["servos"].items():
-                            desired_state["servos"][servo_name] = {"channel": servo_data['channel'], "armed": False}
-                            if 'safe_angle' in servo_data:
-                                desired_state["servos"][servo_name]["armed"] = True
-                                desired_state["servos"][servo_name]["angle"] = servo_data['safe_angle']
-                    self.boards.append(Board(board_name, serial_manager, state, board_config, desired_state))
-                else:
-                    self.boards.append(Board(board_name, serial_manager, state, board_config))
-        else:
-            print("No boards found in configuration or invalid board configuration")
+            for hw_type in self.hardware_types:
+                if hw_type in board_config:
+                    state[hw_type] = {}
+                    for item_name, item_data in board_config[hw_type].items():
+                        state[hw_type][item_name] = {**self.state_defaults[hw_type].copy(), **item_data}
+            is_actuator = board_config.get('is_actuator', False)
+            if is_actuator:
+                desired_state = state.copy()
+                if "servos" in board_config:
+                    desired_state["servos"] = {}
+                    for servo_name, servo_data in board_config["servos"].items():
+                        desired_state["servos"][servo_name] = {"channel": servo_data['channel'], "armed": False}
+                        if 'safe_angle' in servo_data:
+                            desired_state["servos"][servo_name]["armed"] = True
+                            desired_state["servos"][servo_name]["angle"] = servo_data['safe_angle']
+                self.boards.append(Board(board_name, serial_manager, state, board_config, desired_state))
+            else:
+                self.boards.append(Board(board_name, serial_manager, state, board_config))
     
     def get_board(self, board_name):
         """Get a board by name"""
@@ -641,24 +641,26 @@ class CommandProcessor:
         states = {}
         for board in self.hardware_handler.boards:
             states[board.name] = board.state
-        return json.dumps(states, indent=4)
+        return json.dumps(states)
 
     def get_boards_desired_states(self, _):
         desired_states = {}
         for board in self.hardware_handler.boards:
             desired_states[board.name] = board.desired_state
         return json.dumps(desired_states, indent=4)
-    
 
+    def reply_str(self, command, response):
+        return json.dumps({"command": command, "response": response})
+    
     async def process_message(self, command):
         try:
             message_json = json.loads(command)
         except json.JSONDecodeError:
             print(f"Invalid JSON format: {command}")
-            return "Invalid JSON format"
+            return self.reply_str("Invalid Message", "Invalid JSON format")
         if "command" not in message_json or "data" not in message_json:
             print(f"No command found: {command}")
-            return "No command found"
+            return self.reply_str("Invalid Message", "Command not found in message")
         command = message_json["command"]
         data = message_json["data"]
         if command in self.commands:
@@ -667,10 +669,10 @@ class CommandProcessor:
                 response = await self.commands[command](data)
             else:
                 response = func(data)
-            return response
+            return self.reply_str(command, response)
         else:
             print(f"Unknown command: {command}")
-            return f"Unknown command: {command}"
+            return self.reply_str(command, "Unknown command")
         
     def update_desired_state(self, data):
         print("command recieved")
@@ -872,17 +874,17 @@ async def main(windows=False, emulator=False):
     await hardware_handler.initialize()
 
     command_processor = CommandProcessor(state_machine, hardware_handler)
-    udp_server = UDPServer(command_processor, print_send=False, print_receive=False)
+    udp_server = UDPServer(command_processor, print_send=True, print_receive=True)
     signal_handler = SignalHandler(udp_server, windows) #To handle system interrupts
     
     print("Startup Complete, waiting for commands")
     recurring_taskhandler = RecurringTaskHandler(state_machine, command_processor, hardware_handler)
 
 
-    main_loop_time_keeper = TimeKeeper(name="MainLoop", cycle_time=0.01, debug_time=1.0)
+    main_loop_time_keeper = TimeKeeper(name="MainLoop", cycle_time=0.01, debug_time=60.0)
     
-    main_loop_logger = BoardStateLogger("MainLoop", hardware_handler)
-    main_loop_logger.write_headers(hardware_handler.boards)
+    #main_loop_logger = BoardStateLogger("MainLoop", hardware_handler)
+    #main_loop_logger.write_headers(hardware_handler.boards)
 
 
     try:
@@ -926,8 +928,8 @@ async def main(windows=False, emulator=False):
             elif current_state == MachineStates.HOTFIRE:
                 if main_loop_time_keeper.cycle == 0:
                     recurring_taskhandler.set_tasks_active()
-                    hotfire_logger = BoardStateLogger("HotfireLog", hardware_handler)
-                    hotfire_logger.write_headers(hardware_handler.boards)
+                    #hotfire_logger = BoardStateLogger("HotfireLog", hardware_handler)
+                    #hotfire_logger.write_headers(hardware_handler.boards)
 
                 
                 time_since_statechange = main_loop_time_keeper.time_since_statechange()
@@ -939,11 +941,11 @@ async def main(windows=False, emulator=False):
                 for board_name, desired_state in board_desiredstates.items():
                     hardware_handler.update_board_desired_state(board_name, desired_state)
                 
-                hotfire_logger.write_data(hardware_handler.boards)
+                #hotfire_logger.write_data(hardware_handler.boards)
 
                 if state_machine.hotfirecontroller.is_hotfire_complete(time_since_statechange):
                     print(f"HOTFIRE COMPLETE at T{T:.2f}s")
-                    hotfire_logger.close()
+                    #hotfire_logger.close()
                     state_machine.set_state(MachineStates.IDLE)
                     recurring_taskhandler.set_tasks_idle()
                     main_loop_time_keeper.statechange()
@@ -957,8 +959,8 @@ async def main(windows=False, emulator=False):
                 pass
             
             # Sleep to avoid excessive CPU usage
-            if main_loop_time_keeper.cycle % 10 == 0:
-                main_loop_logger.write_data(hardware_handler.boards)
+            #if main_loop_time_keeper.cycle % 10 == 0:
+                #main_loop_logger.write_data(hardware_handler.boards)
             await main_loop_time_keeper.cycle_end()
 
     except KeyboardInterrupt:

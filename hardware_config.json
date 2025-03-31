@@ -1,7 +1,6 @@
 {
-    "boards": [
-        {
-            "board_name": "ActuatorBoard",
+    "boards": {
+        "ActuatorBoard": {
             "active_interval": 0.15,
             "idle_interval": 1,
             "is_actuator": true,
@@ -42,8 +41,7 @@
                 }
             }
         },
-        {
-            "board_name": "Sensorboard0",
+        "Sensorboard0": {
             "active_interval": 0.02,
             "idle_interval": 0.1,
             "serial": {
@@ -72,5 +70,5 @@
                 }
             }
         }
-    ]
+    }
 }
