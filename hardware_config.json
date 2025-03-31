@@ -1,11 +1,11 @@
 {
     "boards": {
         "ActuatorBoard": {
-            "active_interval": 0.05,
-            "idle_interval": 0.1,
+            "active_interval": 0.5,
+            "idle_interval": 5,
             "is_actuator": true,
             "serial": {
-                "port": "/dev/ttyS0",
+                "port": "/dev/ttyS1",
                 "baudrate": 921600
             },
             "servos": {
@@ -42,18 +42,19 @@
             }
         },
         "Sensorboard0": {
-            "active_interval": 0.02,
-            "idle_interval": 0.1,
+            "active_interval": 0.05,
+            "idle_interval": 0.05,
             "serial": {
-                "port": "/dev/ttyS1",
+                "port": "/dev/ttyS0",
                 "baudrate": 921600
             },
             "pts": {
                 "Ox Inj": {
                     "channel": 0,
+                    "adc": true,
                     "raw": 0,
-                    "gain": 1,
-                    "offset": 0
+                    "gain": 0.01,
+                    "offset": 880
                 }
             },
             "tcs": {
@@ -90,7 +91,7 @@
             "powered": null
         },
         "pts": {
-            "p": null
+            "mv": null
         },
         "tcs": {
             "t": null

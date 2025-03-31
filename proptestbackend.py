@@ -148,7 +148,7 @@ class TimeKeeper:
         return self.cycle
 
 class SerialManager:
-    def __init__(self, board_name, port, baudrate, print_send=False, print_receive=False, emulator=False):
+    def __init__(self, board_name, port, baudrate, print_send=False, print_receive=True, emulator=False):
         self.board_name = board_name
         self.emulator = emulator
         self.port = port
@@ -360,8 +360,8 @@ class HardwareHandler:
                         board_name,
                         port=serial_config['port'],
                         baudrate=serial_config['baudrate'],
-                        print_send=self.debug_prints,
-                        print_receive=self.debug_prints,
+                        #print_send=self.debug_prints,
+                        #print_receive=self.debug_prints,
                         emulator=self.emulator
                     )
                     if await serial_manager.initialize():                        
