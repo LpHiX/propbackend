@@ -216,6 +216,7 @@ class SerialManager:
 
                 try:
                     message_json = json.loads(data)
+                    #print(f"SERIALMANAGER JSON: {json.dumps(message_json, indent=4)}")
                     if "send_id" in message_json:
                         send_id = message_json["send_id"]
                         async with self.buffer_lock:
@@ -682,7 +683,10 @@ class CommandProcessor:
         return self.hardware_handler.set_config(data)
 
     async def reload_hardware_json(self, _):
-        return await self.hardware_handler.reload_config()
+        result = await self.hardware_handler.reload_config()
+        if hasattr(self, 'recurring_task_handler'):
+            self.recurring_task_handler.on_machine_startup()
+        return result
 
     async def send_receive(self, data):
         try:
@@ -691,7 +695,8 @@ class CommandProcessor:
             return await self.hardware_handler.send_receive(board_name, message_json)
         except KeyError as e:
             return f"Missing key in data: {e}"
-        
+    def set_recurring_task_handler(self, recurring_task_handler):
+        self.recurring_task_handler = recurring_task_handler
     def get_startup_tasks(self, _):
         return self.hardware_handler.get_startup_tasks(self)
 
@@ -751,9 +756,15 @@ class RecurringTaskHandler:
             self.on_machine_startup()
 
     def on_machine_startup(self):
+        for recurring_task in self.recurring_tasks:
+            recurring_task.kill_task()
+
         self.recurring_tasks = self.command_processor.get_startup_tasks(self.command_processor)
         for recurring_task in self.recurring_tasks:
             asyncio.create_task(recurring_task.start_task())
+
+        if self.state_machine.get_state() == MachineStates.IDLE:
+            self.set_tasks_idle()
 
     def set_tasks_idle(self):
         for board in self.hardware_handler.boards:
@@ -871,6 +882,7 @@ async def main(windows=False, emulator=False):
     
     print("Startup Complete, waiting for commands")
     recurring_taskhandler = RecurringTaskHandler(state_machine, command_processor, hardware_handler)
+    command_processor.set_recurring_task_handler(recurring_taskhandler)
 
 
     main_loop_time_keeper = TimeKeeper(name="MainLoop", cycle_time=0.01, debug_time=60.0)

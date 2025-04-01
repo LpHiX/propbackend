@@ -1,7 +1,7 @@
 {
     "boards": {
         "ActuatorBoard": {
-            "active_interval": 0.05,
+            "active_interval": 0.1,
             "idle_interval": 0.1,
             "is_actuator": true,
             "serial": {
@@ -29,39 +29,46 @@
             },
             "solenoids": {
                 "LED": {
-                    "channel": 40
+                    "channel": 0
                 },
                 "SrvPower": {
-                    "channel": 39
+                    "channel": 1
                 }
             },
             "pyros": {
                 "Igniter": {
-                    "channel": 30
+                    "channel": 0
                 }
             }
         },
         "Sensorboard0": {
-            "active_interval": 0.008,
-            "idle_interval": 0.01,
+            "active_interval": 0.02,
+            "idle_interval": 0.02,
             "serial": {
                 "port": "/dev/ttyAMA0",
                 "baudrate": 921600
             },
             "pts": {
-                "Ox Inj": {
+                "Fuel": {
                     "channel": 0,
-                    "adc": true,
                     "raw": 0,
-                    "gain": 0.01,
-                    "offset": 880
+                    "gain": 0.00876501,
+                    "offset": 763.21,
+                    "adc": true
                 },
-                "Fuel Inj": {
+                "Chamber": {
                     "channel": 1,
-                    "adc": true,
                     "raw": 0,
-                    "gain": 0.003,
-                    "offset": 880
+                    "gain": 0.0277204,
+                    "offset": 862.92551,
+                    "adc": true
+                },
+                "Ox": {
+                    "channel": 2,
+                    "raw": 0,
+                    "gain": 0.00873362,
+                    "offset": 762.5,
+                    "adc": true
                 }
             }
         }
