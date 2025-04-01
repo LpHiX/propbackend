@@ -10,6 +10,7 @@ import os
 import platform
 import csv
 from datetime import datetime
+import copy
 
 
 class MachineStates(Enum):
@@ -148,7 +149,7 @@ class TimeKeeper:
         return self.cycle
 
 class SerialManager:
-    def __init__(self, board_name, port, baudrate, print_send=False, print_receive=True, emulator=False):
+    def __init__(self, board_name, port, baudrate, print_send=False, print_receive=False, emulator=False):
         self.board_name = board_name
         self.emulator = emulator
         self.port = port
@@ -327,17 +328,17 @@ class HardwareHandler:
         self.boards: list[Board] = []
         self.state_defaults: dict = {}
         self.hardware_types: list[str] = []
-
-        with open('hardware_config.json', 'r') as file:
-            self.config = json.load(file)
-        with open('hardware_config.json', 'w') as file:
-                json.dump(self.config, file, indent=4)
      
     async def initialize(self):
         """Initialize all hardware asynchronously"""
         return await self.load_hardware()
     
     async def load_hardware(self):
+
+        with open('hardware_config.json', 'r') as file:
+            self.config = json.load(file)
+        with open('hardware_config.json', 'w') as file:
+                json.dump(self.config, file, indent=4)
         # Initialize serial managers for each board in the configuration
         if 'boards' not in self.config:
             print("No boards found in configuration, json error")
@@ -378,7 +379,7 @@ class HardwareHandler:
                         state[hw_type][item_name] = {**self.state_defaults[hw_type].copy(), **item_data}
             is_actuator = board_config.get('is_actuator', False)
             if is_actuator:
-                desired_state = state.copy()
+                desired_state = copy.deepcopy(state) # WHAT THE FUCK, NESTED DICTIONARIES WERE STILL REFERENCE BASED, LEADING TO UPDATING DESIRED STATES UPDATING ACTUAL STATES
                 if "servos" in board_config:
                     desired_state["servos"] = {}
                     for servo_name, servo_data in board_config["servos"].items():

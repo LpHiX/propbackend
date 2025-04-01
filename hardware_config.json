@@ -1,11 +1,11 @@
 {
     "boards": {
         "ActuatorBoard": {
-            "active_interval": 0.5,
-            "idle_interval": 5,
+            "active_interval": 0.05,
+            "idle_interval": 0.1,
             "is_actuator": true,
             "serial": {
-                "port": "/dev/ttyS1",
+                "port": "/dev/ttyAMA2",
                 "baudrate": 921600
             },
             "servos": {
@@ -42,10 +42,10 @@
             }
         },
         "Sensorboard0": {
-            "active_interval": 0.05,
-            "idle_interval": 0.05,
+            "active_interval": 0.008,
+            "idle_interval": 0.01,
             "serial": {
-                "port": "/dev/ttyS0",
+                "port": "/dev/ttyAMA0",
                 "baudrate": 921600
             },
             "pts": {
@@ -55,24 +55,13 @@
                     "raw": 0,
                     "gain": 0.01,
                     "offset": 880
-                }
-            },
-            "tcs": {
-                "Temperature Sensor": {
+                },
+                "Fuel Inj": {
                     "channel": 1,
+                    "adc": true,
                     "raw": 0,
-                    "gain": 1,
-                    "offset": 0
-                }
-            },
-            "gps": {
-                "GPS": {
-                    "channel": 2
-                }
-            },
-            "imus": {
-                "IMU": {
-                    "channel": 3
+                    "gain": 0.003,
+                    "offset": 880
                 }
             }
         }
