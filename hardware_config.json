@@ -1,7 +1,7 @@
 {
     "boards": {
         "ActuatorBoard": {
-            "active_interval": 0.1,
+            "active_interval": 0.02,
             "idle_interval": 0.1,
             "is_actuator": true,
             "serial": {
@@ -69,6 +69,24 @@
                     "gain": 0.00873362,
                     "offset": 762.5,
                     "adc": true
+                }
+            },
+            "tcs": {
+                "Temperature Sensor": {
+                    "channel": 1,
+                    "raw": 0,
+                    "gain": 1,
+                    "offset": 0
+                }
+            },
+            "gps": {
+                "GPS": {
+                    "channel": 2
+                }
+            },
+            "imus": {
+                "IMU": {
+                    "channel": 3
                 }
             }
         }

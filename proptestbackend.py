@@ -28,6 +28,7 @@ class StateMachine:
         self.state = MachineStates.STARTTUP
         self.hotfirecontroller = self.HotfireController()
         self.changing_state = False
+        self.time_keeper = None
 
 
     def set_state(self, state):
@@ -42,6 +43,9 @@ class StateMachine:
 
     def __str__(self):
         return f"Current State: {self.state.name}"
+
+    def set_time_keeper(self, time_keeper):
+        self.time_keeper = time_keeper
     
     class HotfireController():
         def __init__(self):
@@ -101,6 +105,10 @@ class StateMachine:
             
             return desired_state #THIS A DICT OF BOARDS, WITH THEIR DESIRED STATES INSIDE
         
+        def get_abort_desiredstate(self):
+            return self.start_end_desiredstate
+
+
     def start_hotfire(self):
         if self.state != MachineStates.IDLE:
             return f"Cannot start hotfire from current state: {str(self.state)}"
@@ -108,6 +116,10 @@ class StateMachine:
         print("Hotfire sequence started")
         return "Hotfire sequence started"
 
+    def abort_engine(self):
+        self.set_state(MachineStates.ENGINEABORT)
+        print("Engine abort sequence started")
+        return "Engine abort sequence started"
 
 class TimeKeeper:
     def __init__(self, name, cycle_time, debug_time=0.0):
@@ -463,6 +475,7 @@ class HardwareHandler:
     
     def update_board_desired_state(self, board_name, new_desired_state):
         """Update a board's desired state"""
+        """This will only change components that are armed"""
         board = self.get_board(board_name)
         if not board:
             print(f"Board {board_name} not found")
@@ -477,8 +490,19 @@ class HardwareHandler:
             if hw_type in new_desired_state and hw_type in board.desired_state:
                 for item_name, item_data in new_desired_state[hw_type].items():
                     if item_name in board.state[hw_type]:
-                        for key, value in item_data.items():
-                            board.desired_state[hw_type][item_name][key] = value
+                        if "armed" in board.state[hw_type][item_name].keys():
+                            if board.state[hw_type][item_name]["armed"]:
+                                # Only update the desired state if the item is armed
+                                if item_name in board.desired_state[hw_type]:
+                                    for key, value in item_data.items():
+                                        board.desired_state[hw_type][item_name][key] = value
+                                # If not armed, make sure the desired powered must be off
+                            else:
+                                if "powered" in board.desired_state[hw_type][item_name].keys():
+                                    board.desired_state[hw_type][item_name]["powered"] = False
+                        if "armed" in new_desired_state[hw_type][item_name].keys():
+                            board.desired_state[hw_type][item_name]["armed"] = new_desired_state[hw_type][item_name]["armed"]
+
         return "Desired state updated successfully"
     def unload_hardware(self):
         # Close all serial connections
@@ -607,8 +631,8 @@ class CommandProcessor:
             "set hardware json": self.set_hardware_json,
             "reload hardware json": self.reload_hardware_json,
             "send receive": self.send_receive,
-            "set state": self.state_machine.set_state,
-            "get state": self.state_machine.get_state,
+            #"set state": self.set_state,
+            "get state": self.get_state,
             "get startup tasks": self.get_startup_tasks,
             "update desired state": self.update_desired_state,
             "get running tasks": self.get_running_tasks,
@@ -622,7 +646,31 @@ class CommandProcessor:
             "fts": self.fts,
             "get boards states": self.get_boards_states,
             "get boards desired states": self.get_boards_desired_states,
+            "get time": self.get_time,
+            "return to idle": self.return_to_idle,
         }
+
+    def get_state(self, _):
+        state = self.state_machine.get_state()
+        return self.reply_str("get state", state.name)
+
+    def get_time(self, _):
+        if self.state_machine.time_keeper is None:
+            hotfire_timestr = "TimeKeeperError"
+        else:
+            hotfire_timestr = "T= Idling"
+        if self.state_machine.get_state() == MachineStates.HOTFIRE:
+            hotfire_time = self.state_machine.hotfirecontroller.get_T(self.state_machine.time_keeper.time_since_statechange())
+            if hotfire_time > 0:
+                hotfire_timestr = f"T= +{hotfire_time:.2f} s"                
+            else:
+                hotfire_timestr = f"T= {hotfire_time:.2f} s"
+        return self.reply_str("get time",
+            {
+                "date_time": f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                "hotfire_time": hotfire_timestr
+            }
+        )
 
     def get_hotfire_sequences(self, data):
         return self.state_machine.hotfirecontroller.get_hotfire_sequence()
@@ -713,8 +761,25 @@ class CommandProcessor:
         print("stop_task not implemented")
         return "stop_task not implemented"
     def abort_engine(self, data):
-        print("abort_engine not implemented")
-        return "abort_engine not implemented"
+        return self.state_machine.abort_engine()
+    
+    def return_to_idle(self, data):
+        time_since_statechange = self.state_machine.time_keeper.time_since_statechange()
+        if self.state_machine.get_state() == MachineStates.IDLE:
+            return self.reply_str("return to idle", "Already in IDLE state")
+        if self.state_machine.get_state() == MachineStates.STARTTUP:
+            return self.reply_str("return to idle", "Cannot return to IDLE from STARTUP state")
+        if self.state_machine.get_state() == MachineStates.HOTFIRE:
+            return self.reply_str("return to idle", "Cannot return to IDLE from HOTFIRE state, use abort")
+        if self.state_machine.get_state() == MachineStates.ENGINEABORT:
+            if self.state_machine.time_keeper.time_since_statechange() < 2.0:
+                return self.reply_str("return to idle", f"Cannot return to IDLE only {time_since_statechange} seconds after abort")
+            else:
+                self.state_machine.set_state(MachineStates.IDLE)
+                self.state_machine.time_keeper.statechange()
+                self.hardware_handler.disarm_all()
+                return self.reply_str("return to idle", "Returned to IDLE state")
+
     def fts(self, data):
         print("fts not implemented")
         return "fts not implemented"
@@ -886,6 +951,7 @@ async def main(windows=False, emulator=False):
 
 
     main_loop_time_keeper = TimeKeeper(name="MainLoop", cycle_time=0.01, debug_time=60.0)
+    state_machine.set_time_keeper(main_loop_time_keeper)
     
     #main_loop_logger = BoardStateLogger("MainLoop", hardware_handler)
     #main_loop_logger.write_headers(hardware_handler.boards)
@@ -901,30 +967,27 @@ async def main(windows=False, emulator=False):
                 main_loop_time_keeper.statechange()     
                 state_machine.changing_state = False
 
-            # if(main_loop_time_keeper.get_cycle() % 100 == 0):
-            #     # print(len(asyncio.all_tasks()))
-            #     for board in hardware_handler.boards:
-            #         #print(json.dumps(board.state, indent=4))
-            #         pass
-
-
 
             # Perform actions based on current state
             if current_state == MachineStates.STARTTUP:
                 if main_loop_time_keeper.time_since_statechange() > 5:
                     state_machine.set_state(MachineStates.IDLE)
-                    recurring_taskhandler.set_tasks_idle()
                     command_processor.disarm_all(None)
                     print("State changed to IDLE")
             
             elif current_state == MachineStates.IDLE:
-                # if main_loop_time_keeper.time_since_statechange() < 2:
-                #     command_processor.disarm_all()
+                if main_loop_time_keeper.cycle == 0:
+                    recurring_taskhandler.set_tasks_idle()
                 pass
                     
 
             elif current_state == MachineStates.ENGINEABORT:
-                pass
+                if main_loop_time_keeper.cycle == 0:
+                    recurring_taskhandler.set_tasks_active()
+
+                abort_desiredstates = state_machine.hotfirecontroller.get_abort_desiredstate()
+                for board_name, desired_state in abort_desiredstates.items():
+                    hardware_handler.update_board_desired_state(board_name, desired_state)
 
             elif current_state == MachineStates.FTS:
                 pass
@@ -951,7 +1014,6 @@ async def main(windows=False, emulator=False):
                     print(f"HOTFIRE COMPLETE at T{T:.2f}s")
                     #hotfire_logger.close()
                     state_machine.set_state(MachineStates.IDLE)
-                    recurring_taskhandler.set_tasks_idle()
                     main_loop_time_keeper.statechange()
                     command_processor.disarm_all(None)
                     print("State changed to IDLE")
@@ -960,7 +1022,17 @@ async def main(windows=False, emulator=False):
                 pass
 
             elif current_state == MachineStates.HOVER:
-                pass
+                states = {}
+                for board in hardware_handler.boards:
+                    states[board.name] = board.state
+                
+                #---------------------------------------
+                desired_states = {}
+                #Implement control system here!!!!!!!!!
+                #desired_states = controlsystem(states)
+                #---------------------------------------
+
+                hardware_handler = hardware_handler.update_board_desired_state("ActuatorBoard", desired_states)
             
             # Sleep to avoid excessive CPU usage
             #if main_loop_time_keeper.cycle % 10 == 0:
