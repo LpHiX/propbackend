@@ -11,6 +11,9 @@ import platform
 import csv
 from datetime import datetime
 import copy
+import numpy as np
+from scipy.linalg import cholesky
+from scipy.spatial.transform import Rotation as R
 
 
 class MachineStates(Enum):
@@ -931,6 +934,262 @@ class SignalHandler:
         signal.signal(signal.SIGTSTP, signal.SIG_DFL)
         os.kill(os.getpid(), signal.SIGTSTP)
 
+class UKF:
+    def __init__(self, n_states, n_measurements, process_noise_matrix, measurement_noise_matrix, alpha=0.001, beta=2.0, kappa=0):
+        self.n = n_states # State vector dimension
+        self.m = n_measurements # Measurement vector dimension
+        self.x = np.zeros(self.n) # State vector
+        self.P = np.eye(self.n)  # State covariance matrix
+        self.Q = process_noise_matrix
+        self.R = measurement_noise_matrix
+        
+        # Common parameters for UKF https://groups.seas.harvard.edu/courses/cs281/papers/unscented.pdf
+        self.alpha = alpha
+        self.beta = beta
+        self.kappa = kappa
+        self.lambd = alpha**2 * (self.n + kappa) - self.n
+        
+        self.Wm = np.full(2 * self.n + 1, 0.5 / (self.n + self.lambd))
+        self.Wc = np.full(2 * self.n + 1, 0.5 / (self.n + self.lambd))
+        self.Wm[0] = self.lambd / (self.n + self.lambd)
+        self.Wc[0] = (self.lambd / (self.n + self.lambd)) + (1 - self.alpha**2 + self.beta)
+
+
+    def generate_sigma_points(self):
+        S = cholesky((self.n + self.lambd) * self.P)
+        self.sigma_points[0] = self.x
+        for i in range(self.n):
+            self.sigma_points[i + 1] = self.x + S[i]
+            self.sigma_points[i + 1 + self.n] = self.x - S[i]
+        return self.sigma_points
+
+    def predict(self, process_model, dt):
+        sigma_points = self.generate_sigma_points()
+        transformed_sigma_points = np.zeros_like(sigma_points)
+        for i in range(2 * self.n + 1):
+            transformed_sigma_points[i] = process_model(sigma_points[i], dt)
+
+        x_pred = np.dot(self.Wm, transformed_sigma_points)
+        P_pred = np.zeros((self.n, self.n))
+        for i in range(2 * self.n + 1):
+            diff = transformed_sigma_points[i] - x_pred
+            P_pred += self.Wc[i] * np.outer(diff, diff)
+
+        # Add process noise covariance
+        P_pred += self.Q
+        self.x = x_pred
+        self.P = P_pred
+        self.sigma_points = transformed_sigma_points
+    
+    def update(self, measurement_model, measurement):
+        transformed_sigma_points = np.zeros((2 * self.n + 1, self.m))
+        for i in range(2 * self.n + 1):
+            transformed_sigma_points[i] = measurement_model(self.sigma_points[i])
+
+        y_pred = np.dot(self.Wm, transformed_sigma_points)
+        Pyy = np.zeros((self.m, self.m))
+        for i in range(2 * self.n + 1):
+            diff = transformed_sigma_points[i] - y_pred
+            Pyy += self.Wc[i] * np.outer(diff, diff)
+
+        # Add measurement noise covariance
+        Pyy += self.R
+
+        # Cross-covariance matrix
+        Pxy = np.zeros((self.n, self.m))
+        for i in range(2 * self.n + 1):
+            diff_x = self.sigma_points[i] - self.x
+            diff_y = transformed_sigma_points[i] - y_pred
+            Pxy += self.Wc[i] * np.outer(diff_x, diff_y)
+
+        # Calculate Kalman gain
+        K = Pxy @ np.linalg.inv(Pyy)
+
+        # Update state and covariance
+        self.x += K @ (measurement - y_pred)
+        self.P -= K @ Pyy @ K.T
+
+class HopperStateEstimator:
+    def __init__(self):
+        # Define state vector:
+        # [x, y, z, vx, vy, vz, qw, qx, qy, qz, wx, wy, wz, m]
+        # where:
+        # - x,y,z: position in NED frame (meters)
+        # - vx,vy,vz: velocity in NED frame (m/s)
+        # - qw,qx,qy,qz: quaternion representing orientation
+        # - wx,wy,wz: angular velocity (rad/s)
+        # - m (rocket mass)
+        self.n_states = 14
+
+        # Define process noise covariance matrix (Q) (THIS NEEDS TUNING)
+        self.Q = np.eye(self.n_states) * 0.01
+        self.Q[0:3, 0:3] *= 0.001 # Position noise is smaller (GPT said so)
+        self.Q[6:10, 6:10] *= 0.001 # Quaternion noise is smaller (GPT said so)
+        self.Q[13, 13] *= 10 # Mass noise is very high
+
+        # Define measurement vector:
+        # [gnss_x, gnss_y, gnss_z,
+        # accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z, mag_x, mag_y, mag_z,
+        #  baro_alt, chamber_pressure]
+        self.n_measurements = 14
+
+        # Define measurement noise covariance matrix (R) (THIS NEEDS TUNING)
+        self.R = np.eye(self.n_measurements)
+        self.R[0:3, 0:3] *= 0.01 #GNSS Noise (in meters)
+        self.R[3:6, 3:6] *= 0.1 #Accelerometer noise (in m/s^2)
+        self.R[6:9, 6:9] *= 0.01 #Gyro noise (in rad/s)
+        self.R[9:12, 9:12] *= 0.01 #Magnetometer noise (in uT)
+        self.R[12, 12] *= 0.1 #Barometer noise (in meters)
+        self.R[13, 13] *= 0.1 #Chamber pressure noise (in bar)
+
+        self.ukf = UKF(self.n_states, self.n_measurements, self.Q, self.R)
+
+        self.ukf.x = np.zeros(self.n_states) # Initialize state vector to zeros
+        self.ukf.x[6] = 1.0 # Set initial quaternion to identity (no rotation)
+        self.ukf.x[13] = 50.0 # Set initial mass to 50 kg (arbitrary)
+
+        self.ukf.P = np.eye(self.n_states) * 10 # Initialize covariance matrix (High uncertainty)
+    
+    def process_model(self, state, dt):
+        new_state = np.copy(state)
+
+        x, y, z = state[0:3]
+        vx, vy, vz = state[3:6]
+        qw, qx, qy, qz = state[6:10]
+        wx, wy, wz = state[10:13]
+        m = state[13]
+
+        # Update position based on velocity
+        new_state[0:3] += state[3:6] * dt
+        
+        # Update quaternion based on angular velocity
+        q = R.from_quat([qw, qx, qy, qz])
+        R_b2n = q.as_matrix()
+
+        thrust_magnitude = 0 #TODO: Get from chamber pressure
+        tvc_x_angle = 0 #TODO: Get from ODrive
+        tvc_y_angle = 0 #TODO: Get from ODrive
+
+        #Calculate thrust vector in body frame with TVC angles
+        thrust_body = np.array([
+            thrust_magnitude * np.sin(tvc_x_angle), 
+            thrust_magnitude * np.sin(tvc_y_angle),
+            thrust_magnitude * np.cos(tvc_x_angle) * np.cos(tvc_y_angle)
+        ])
+
+        #TODO There is a lot to do here
+
+
+        q_dot = 0.5 * q * R.from_rotvec(state[10:13])
+        new_state[6:10] += q_dot.as_quat() * dt
+        new_state[6:10] /= np.linalg.norm(new_state[6:10]) # Normalize quaternion
+
+        
+        return new_state
+
+
+    def measurement_model(self, state):
+        x, y, z = state[0:3]
+        vx, vy, vz = state[3:6]
+        qw, qx, qy, qz = state[6:10]
+        wx, wy, wz = state[10:13]
+        m = state[13]
+
+        # For simplicity, assume:
+        # - GNSS directly measures position
+        # - Accelerometer measures gravity plus linear acceleration
+        # - Gyroscope directly measures angular velocity
+        # - Magnetometer measures the Earth's magnetic field rotated by orientation
+        # - Barometer directly measures altitude (positive z in ENU frame)
+
+        # TODO In a real implementation, these would use proper quaternion rotations
+        # to transform between body and NED frames
+
+        measurement = np.zeros(self.n_measurements)
+
+        measurement[0:3] = state[0:3] # GNSS position in ENU frame
+
+        # TODO Accelerometer implementing gravity rotation
+        g = np.array([0, 0, -9.81])
+        measurement[3:6] = g #TODO: simplistic model
+
+        measurement[6:9] = state[10:13] # Gyroscope angular velocity
+
+        measurement[9:12] = np.array([0, 1, 0]) # Magnetometer, assume magnetic field in ENU frame (TODO: use q to rotate)
+        measurement[12] = state[2]  # Barometer measures altitude (positive z in ENU frame)
+
+        measurement[13] = 0  # Chamber pressure TODO add C_f and c_star, needs to come from PT sensor
+
+        return measurement
+    
+    def predict(self, dt):
+        self.ukf.predict(self.process_model, dt)
+
+    def update_with_sensors(self, gnss=None, accel=None, gyro=None, mag=None, baro=None, chamber_pressure=None):
+        """
+        Update state with sensor measurements
+        Each sensor can be None if not available
+        """
+        # Construct measurement vector from available sensors
+        measurement = np.zeros(self.n_measurements)
+        measurement_mask = np.zeros(self.n_measurements, dtype=bool)
+        
+        # GNSS position
+        if gnss is not None:
+            measurement[0:3] = gnss
+            measurement_mask[0:3] = True
+            
+        # Accelerometer
+        if accel is not None:
+            measurement[3:6] = accel
+            measurement_mask[3:6] = True
+
+        # Gyroscope
+        if gyro is not None:
+            measurement[6:9] = gyro
+            measurement_mask[6:9] = True
+            
+        # Magnetometer
+        if mag is not None:
+            measurement[9:12] = mag
+            measurement_mask[9:12] = True
+            
+        # Barometer
+        if baro is not None:
+            measurement[12] = baro
+            measurement_mask[12] = True
+
+        # Chamber pressure
+        if chamber_pressure is not None:
+            measurement[13] = chamber_pressure
+            measurement_mask[13] = True
+            
+        # Create a new measurement vector and model with only available sensors
+        n_available = np.sum(measurement_mask)
+        if n_available > 0:
+            available_measurement = measurement[measurement_mask]
+            
+            # Filter R to only use available measurements
+            R_available = self.ukf.R[np.ix_(measurement_mask, measurement_mask)]
+            
+            # Create a temporary measurement model that matches available sensors
+            def available_measurement_model(state):
+                full_measurement = self.measurement_model(state)
+                return full_measurement[measurement_mask]
+            
+            # Update the UKF with available measurements
+            self.ukf.update(available_measurement, available_measurement_model)
+            
+        return self.get_state()
+    
+    def get_state(self):
+        """Return the current state estimate"""
+        return {
+            'position': self.ukf.x[0:3],
+            'velocity': self.ukf.x[3:6],
+            'quaternion': self.ukf.x[6:10],
+            'angular_velocity': self.ukf.x[10:13]
+        }
 
 
 async def main(windows=False, emulator=False):
