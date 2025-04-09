@@ -9,7 +9,7 @@ from .states.hotfire_state import HotfireState
 from .states.launch_state import LaunchState
 from .states.hover_state import HoverState
 
-from ..debug_logger import debug_logger
+from ..utils import debug_logger
 
 
 
