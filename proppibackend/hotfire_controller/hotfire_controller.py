@@ -1,28 +1,3 @@
-
-class StateMachine:
-    def __init__(self):
-        self.state = MachineStates.STARTTUP
-        self.hotfirecontroller = self.HotfireController()
-        self.changing_state = False
-        self.time_keeper = None
-
-
-    def set_state(self, state):
-        self.changing_state = True
-        if isinstance(state, MachineStates):
-            self.state = state
-        else:
-            raise ValueError("Invalid state")
-
-    def get_state(self):
-        return self.state
-
-    def __str__(self):
-        return f"Current State: {self.state.name}"
-
-    def set_time_keeper(self, time_keeper):
-        self.time_keeper = time_keeper
-    
     class HotfireController():
         def __init__(self):
             with open('hotfiresequence.json', 'r') as file:
@@ -83,16 +58,3 @@ class StateMachine:
         
         def get_abort_desiredstate(self):
             return self.start_end_desiredstate
-
-
-    def start_hotfire(self):
-        if self.state != MachineStates.IDLE:
-            return f"Cannot start hotfire from current state: {str(self.state)}"
-        self.set_state(MachineStates.HOTFIRE)
-        print("Hotfire sequence started")
-        return "Hotfire sequence started"
-
-    def abort_engine(self):
-        self.set_state(MachineStates.ENGINEABORT)
-        print("Engine abort sequence started")
-        return "Engine abort sequence started"
