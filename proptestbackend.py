@@ -956,6 +956,7 @@ class UKF:
 
 
     def generate_sigma_points(self):
+        self.sigma_points = np.zeros((2 * self.n + 1, self.n))
         S = cholesky((self.n + self.lambd) * self.P)
         self.sigma_points[0] = self.x
         for i in range(self.n):
@@ -1014,8 +1015,8 @@ class HopperStateEstimator:
         # Define state vector:
         # [x, y, z, vx, vy, vz, qw, qx, qy, qz, wx, wy, wz, m]
         # where:
-        # - x,y,z: position in NED frame (meters)
-        # - vx,vy,vz: velocity in NED frame (m/s)
+        # - x,y,z: position in ENU frame (meters)
+        # - vx,vy,vz: velocity in ENU frame (m/s)
         # - qw,qx,qy,qz: quaternion representing orientation
         # - wx,wy,wz: angular velocity (rad/s)
         # - m (rocket mass)
@@ -1042,6 +1043,20 @@ class HopperStateEstimator:
         self.R[12, 12] *= 0.1 #Barometer noise (in meters)
         self.R[13, 13] *= 0.1 #Chamber pressure noise (in bar)
 
+        #TODO MAKE THIS A FUNCTION OF MASS
+        self.inertia = {
+            'Ixx': 1.0,  # kg·m²
+            'Iyy': 1.0,  # kg·m²
+            'Izz': 0.5,  # kg·m²
+            'dIxx_dt': 0.0,  # Time derivative of Ixx
+            'dIyy_dt': 0.0,  # Time derivative of Iyy
+            'dIzz_dt': 0.0,  # Time derivative of Izz
+            'dm_dt': -0.1,   # Mass flow rate (kg/s)
+        }
+
+        self.thrust_pos = np.array([0.0, 0.0, -0.5])  # Thrust position relative to rocket body
+        self.cg = np.array([0.0, 0.0, 0.0])  # Center of gravity TODO WILL CHANGE OVER TIME
+
         self.ukf = UKF(self.n_states, self.n_measurements, self.Q, self.R)
 
         self.ukf.x = np.zeros(self.n_states) # Initialize state vector to zeros
@@ -1049,6 +1064,11 @@ class HopperStateEstimator:
         self.ukf.x[13] = 50.0 # Set initial mass to 50 kg (arbitrary)
 
         self.ukf.P = np.eye(self.n_states) * 10 # Initialize covariance matrix (High uncertainty)
+
+        # Control inputs (will be updated from sensors/commands)
+        self.tvc_x_angle = 0.0  # Gimbal angle 1 (rad)
+        self.tvc_y_angle = 0.0   # Gimbal angle 2 (rad)
+        self.thrust = 0.0  # Thrust (N)
     
     def process_model(self, state, dt):
         new_state = np.copy(state)
@@ -1063,30 +1083,104 @@ class HopperStateEstimator:
         new_state[0:3] += state[3:6] * dt
         
         # Update quaternion based on angular velocity
-        q = R.from_quat([qw, qx, qy, qz])
-        R_b2n = q.as_matrix()
+        q = np.array([qw, qx, qy, qz])
+        q = q / np.linalg.norm(q)  # Normalize quaternion
+        rot = R.from_quat(q, scalar_first=True)
+        R_e2b = rot.as_matrix()  # Rotation matrix from ENU to body frame
+
+        vel_enu = np.array([vx, vy, vz])
+        vel_body = R_e2b @ vel_enu
+        U, V, W = vel_body
+
+        p, q, r = wx, wy, wz
+
+        # euler = rot.as_euler('xyz')  # roll, pitch, yaw
+        # phi, theta, psi = euler
 
         thrust_magnitude = 0 #TODO: Get from chamber pressure
         tvc_x_angle = 0 #TODO: Get from ODrive
         tvc_y_angle = 0 #TODO: Get from ODrive
 
-        #Calculate thrust vector in body frame with TVC angles
-        thrust_body = np.array([
-            thrust_magnitude * np.sin(tvc_x_angle), 
-            thrust_magnitude * np.sin(tvc_y_angle),
-            thrust_magnitude * np.cos(tvc_x_angle) * np.cos(tvc_y_angle)
-        ])
+        thrust_x = thrust_magnitude * np.sin(tvc_x_angle)
+        thrust_y = thrust_magnitude * np.cos(tvc_x_angle) * np.sin(tvc_y_angle)
+        thrust_z = thrust_magnitude * np.cos(tvc_x_angle) * np.cos(tvc_y_angle)
 
-        #TODO There is a lot to do here
+        g_earth = np.array([0, 0, -9.81])  # Gravity vector in ENU frame
+        g_body = R_e2b @ g_earth  # Gravity vector in body frame
+        g_x, g_y, g_z = g_body
 
+        F_x = thrust_x + m * g_x
+        F_y = thrust_y + m * g_y
+        F_z = thrust_z + m * g_z
 
-        q_dot = 0.5 * q * R.from_rotvec(state[10:13])
-        new_state[6:10] += q_dot.as_quat() * dt
-        new_state[6:10] /= np.linalg.norm(new_state[6:10]) # Normalize quaternion
+        #Thrust position from CG
+        l_x = self.thrust_pos[0] - self.cg[0]
+        l_y = self.thrust_pos[1] - self.cg[1]
+        l_z = self.thrust_pos[2] - self.cg[2]
 
+        thrust_vector = np.array([thrust_x, thrust_y, thrust_z])
+        lever_arm = np.array([l_x, l_y, l_z])
+        moments = np.cross(lever_arm, thrust_vector)
+        L, M, N = moments
+        N += self.rcs_roll #TODO Get from control system
+
+        # Extract inertia parameters
+        Ixx = self.inertia['Ixx']
+        Iyy = self.inertia['Iyy']
+        Izz = self.inertia['Izz']
+        dIxx_dt = self.inertia['dIxx_dt']
+        dIyy_dt = self.inertia['dIyy_dt']
+        dIzz_dt = self.inertia['dIzz_dt']
+        dm_dt = self.inertia['dm_dt']
+        
+        # Body-frame accelerations
+        Udot = F_x/m - (W*q-V*r) + dm_dt*U/m
+        Vdot = F_y/m - (U*r-p*W) + dm_dt*V/m
+        Wdot = F_z/m - (V*p-U*q) + dm_dt*W/m
+        
+        # Angular accelerations
+        pdot = (L - q*r*(Izz-Iyy) - dIxx_dt*p)/Ixx
+        qdot = (M - r*p*(Ixx-Izz) - dIyy_dt*q)/Iyy
+        rdot = (N - p*q*(Iyy-Ixx) + dIzz_dt*r)/Izz
+                
+        # Convert body accelerations to ENU accelerations
+        accel_body = np.array([Udot, Vdot, Wdot])
+        accel_enu = R_e2b.T @ accel_body  # Transpose of R_e2b converts body to ENU
+        
+        # Update position based on velocity
+        new_state[0:3] += state[3:6] * dt
+        
+        # Update velocity based on acceleration
+        new_state[3:6] += accel_enu * dt
+        
+        # Update quaternion
+        omega = np.array([0, p, q, r])
+        # https://aero.us.es/dve/Apuntes/Lesson4.pdf page 13
+        q_dot = 0.5 * self.quaternion_multiply(q, omega)  # Quaternion derivative (using quaternion kinematics)
+        new_state[6:10] += q_dot * dt
+        new_state[6:10] /= np.linalg.norm(new_state[6:10])  # Normalize
+        
+        # Update angular velocity
+        new_state[10] += pdot * dt
+        new_state[11] += qdot * dt
+        new_state[12] += rdot * dt
+        
+        # Update mass
+        new_state[13] += dm_dt * dt
         
         return new_state
-
+    
+    def quaternion_multiply(self, q1, q2):
+        """Multiply two quaternions"""
+        w1, x1, y1, z1 = q1
+        w2, x2, y2, z2 = q2
+        
+        w = w1*w2 - x1*x2 - y1*y2 - z1*z2
+        x = w1*x2 + x1*w2 + y1*z2 - z1*y2
+        y = w1*y2 - x1*z2 + y1*w2 + z1*x2
+        z = w1*z2 + x1*y2 - y1*x2 + z1*w2
+        
+        return np.array([w, x, y, z])
 
     def measurement_model(self, state):
         x, y, z = state[0:3]
@@ -1095,23 +1189,38 @@ class HopperStateEstimator:
         wx, wy, wz = state[10:13]
         m = state[13]
 
+        # This is a function that converts the state vector to a measurement vector
+
         # For simplicity, assume:
-        # - GNSS directly measures position
-        # - Accelerometer measures gravity plus linear acceleration
-        # - Gyroscope directly measures angular velocity
-        # - Magnetometer measures the Earth's magnetic field rotated by orientation
+        # - GNSS directly measures position in ENU frame
+        # - Accelerometer measures gravity plus linear acceleration in body frame
+        # - Gyroscope directly measures angular velocity in body frame
+        # - Magnetometer measures the Earth's magnetic field rotated in the body frame
         # - Barometer directly measures altitude (positive z in ENU frame)
 
         # TODO In a real implementation, these would use proper quaternion rotations
         # to transform between body and NED frames
 
+        rot = R.from_quat([qw, qx, qy, qz], scalar_first=True)
+        R_e2b = rot.as_matrix()  # Rotation matrix from ENU to body frame
+
         measurement = np.zeros(self.n_measurements)
 
         measurement[0:3] = state[0:3] # GNSS position in ENU frame
 
-        # TODO Accelerometer implementing gravity rotation
-        g = np.array([0, 0, -9.81])
-        measurement[3:6] = g #TODO: simplistic model
+        thrust_magnitude = 0 #TODO: Get from chamber pressure
+        tvc_x_angle = 0 #TODO: Get from ODrive
+        tvc_y_angle = 0 #TODO: Get from ODrive
+
+        thrust_x = thrust_magnitude * np.sin(tvc_x_angle)
+        thrust_y = thrust_magnitude * np.cos(tvc_x_angle) * np.sin(tvc_y_angle)
+        thrust_z = thrust_magnitude * np.cos(tvc_x_angle) * np.cos(tvc_y_angle)
+
+        g_earth = np.array([0, 0, -9.81])  # Gravity vector in ENU frame
+        g_body = R_e2b @ g_earth  # Gravity vector in body frame
+        thrust_body = np.array([thrust_x, thrust_y, thrust_z])
+        accel_body = thrust_body / m - g_body  # Accelerometer measures thrust minus gravity in body frame
+        measurement[3:6] = accel_body
 
         measurement[6:9] = state[10:13] # Gyroscope angular velocity
 
@@ -1190,6 +1299,14 @@ class HopperStateEstimator:
             'quaternion': self.ukf.x[6:10],
             'angular_velocity': self.ukf.x[10:13]
         }
+    def update_control_inputs(self, thrust, tvc_x_angle, tvc_y_angle):
+        self.thrust = thrust
+        self.tvc_x_angle = tvc_x_angle
+        self.tvc_y_angle = tvc_y_angle
+
+    def update_inertia_and_cg(self, mass):
+        pass
+
 
 
 async def main(windows=False, emulator=False):
@@ -1315,18 +1432,3 @@ if __name__ == "__main__":
         print("Running on Windows - standard event loop will be used")
         asyncio.run(main(windows=True))
     #syncio.run(main(emulator=True))
-
-    '''
-    TODO
-    - Logging of each state to a csv file (Ability to name it after a test)
-    - hotfires  
-    - UDP and serial json logging
-    Lower priority
-    - have board name be the key for each board instead of a property in board list
-    - turn lists into dicts
-    - Only send json through if it exists in the hardware configuration, unless unsafe=true
-
-
-    - hardware json to gui
-
-    '''
