@@ -1,15 +1,18 @@
 from __future__ import annotations
-from .base_state import State
+import asyncio
 
-from .states.startup_state import StartupState
-from .states.idle_state import IdleState
-from .states.engine_abort_state import EngineAbortState
-from .states.fts_state import FTSState
-from .states.hotfire_state import HotfireState
-from .states.launch_state import LaunchState
-from .states.hover_state import HoverState
+from proppibackend.state_machine.base_state import State
+from proppibackend.utils import debug_logger
+from proppibackend.utils.time_keeper import TimeKeeper
 
-from ..utils import debug_logger
+from proppibackend.state_machine.startup_state import StartupState
+from proppibackend.state_machine.idle_state import IdleState
+from proppibackend.state_machine.engine_abort_state import EngineAbortState
+from proppibackend.state_machine.fts_state import FTSState
+from proppibackend.state_machine.hotfire_state import HotfireState
+from proppibackend.state_machine.launch_state import LaunchState
+from proppibackend.state_machine.hover_state import HoverState
+
 
 
 
@@ -26,19 +29,26 @@ class StateMachine:
     }
     def __init__(self) -> None:
         self._state: State | None = None
+        self.time_keeper = TimeKeeper(name="StateMachineTimeKeeper", cycle_time=0.001, debug_time=1)
         self.transition_to(StartupState())
-        #self.hotfirecontroller = self.HotfireController()
+
+    
 
     def transition_to(self, state: State) -> None:
-        if not self.is_valid_transition(type(state)):
-            debug_logger.debug(f"Invalid transition from {type(self._state).__name__} to {type(state).__name__}. Allowed = {[s.__name__ for s in self._valid_transitions.get(type(self._state), set())]}")
         if self._state is not None:
+            transition_valid, reason = self._state.can_transition_to(state)
+            if not transition_valid:
+                debug_logger.debug(f"Attempted transition from {type(self._state).__name__} to {type(state).__name__} failed, Reason: {reason}")
+                return
             self._state.teardown()
+        debug_logger.info(f"Transitioning from {type(self._state).__name__} to {type(state).__name__}")
         self._state = state
         self._state.state_machine = self
         self._state.setup()
+        self.time_keeper.statechange()
+        debug_logger.debug(f"State {type(self._state).__name__} setup complete")
 
-    def is_valid_transition(self, target_state: type[State]) -> bool:
-        if self._state is None:
-            return True
-        return target_state in self._valid_transitions.get(type(self._state), set())
+    async def main_loop(self) -> None:
+        self.time_keeper.cycle_start()
+        self._state.loop()
+        await self.time_keeper.cycle_end()

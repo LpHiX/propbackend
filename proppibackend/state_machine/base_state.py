@@ -27,3 +27,7 @@ class State(ABC):
     @abstractmethod
     def teardown(self) -> None:
         pass
+
+    @abstractmethod
+    def can_transition_to(self, target_state: type['State']) -> tuple[bool, str]:
+        pass

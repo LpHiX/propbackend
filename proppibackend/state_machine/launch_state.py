@@ -1,6 +1,6 @@
-from ..base_state import State
+from proppibackend.state_machine.base_state import State
 
-class IdleState(State):
+class LaunchState(State):
     def setup(self) -> None:
         pass
 

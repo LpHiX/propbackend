@@ -1,4 +1,4 @@
-from ..serial_manager.serial_manager import SerialManager
+from ..interfaces.serial_manager import SerialManager
 
 class Board:
     def __init__(self, name: str, serialmanager: SerialManager, state: dict, config: dict, desired_state: dict=None):

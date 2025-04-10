@@ -1,5 +1,5 @@
-from ..state_machine import StartupState
-from ..state_machine import StateMachine
+from proppibackend.state_machine import StartupState
+from proppibackend.state_machine import StateMachine
 
 def test_state_machine():
     state_machine = StateMachine()

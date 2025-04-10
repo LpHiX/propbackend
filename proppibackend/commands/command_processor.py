@@ -1,4 +1,4 @@
-from ..hardware_handler import HardwareHandler
+from ..hardware import HardwareHandler
 from ..state_machine import StateMachine
 import json
 

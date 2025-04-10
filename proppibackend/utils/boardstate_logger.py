@@ -1,10 +1,10 @@
 
-from ..hardware_handler import HardwareHandler
+from ..hardware import HardwareHandler
 import os
 import datetime
 import csv
 import time
-from ..hardware_handler import Board
+from ..hardware import Board
 
 class BoardStateLogger:
     def __init__(self, name, hardware_handler: HardwareHandler, log_dir="/mnt/proppi_data/logs"):

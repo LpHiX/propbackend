@@ -1,6 +1,6 @@
 import json
 from .board import Board
-from ..serial_manager.serial_manager import SerialManager
+from ..interfaces.serial_manager import SerialManager
 import copy
 
 class HardwareHandler:
