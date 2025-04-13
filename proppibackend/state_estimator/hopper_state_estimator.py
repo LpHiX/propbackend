@@ -1,3 +1,8 @@
+import numpy as np
+from scipy.spatial.transform import Rotation as R
+from proppibackend.state_estimator.ukf import UKF
+
+
 class HopperStateEstimator:
     def __init__(self):
         # Define state vector:
@@ -212,7 +217,11 @@ class HopperStateEstimator:
 
         measurement[6:9] = state[10:13] # Gyroscope angular velocity
 
-        measurement[9:12] = np.array([0, 1, 0]) # Magnetometer, assume magnetic field in ENU frame (TODO: use q to rotate)
+        mag_field_enu = np.array([0, np.cos(np.radians(67)), -np.sin(np.radians(67))])  # Earth's magnetic field in ENU frame
+        mag_field_enu = mag_field_enu / np.linalg.norm(mag_field_enu)  # Normalize
+        mag_field_body = R_e2b @ mag_field_enu  # Rotate to body frame
+        measurement[9:12] = mag_field_body  # Magnetometer measures Earth's magnetic field in body frame
+
         measurement[12] = state[2]  # Barometer measures altitude (positive z in ENU frame)
 
         measurement[13] = 0  # Chamber pressure TODO add C_f and c_star, needs to come from PT sensor
