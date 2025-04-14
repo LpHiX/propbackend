@@ -1,38 +1,19 @@
 {
     "boards": {
         "ActuatorBoard": {
-            "active_interval": 0.02,
-            "idle_interval": 0.1,
+            "active_interval": 0.5,
+            "idle_interval": 0.5,
             "is_actuator": true,
             "serial": {
                 "port": "/dev/ttyAMA2",
                 "baudrate": 921600
             },
-            "servos": {
-                "Fuel Main": {
-                    "channel": 15,
-                    "minangle": 0,
-                    "maxangle": 180,
-                    "safe_angle": 0
-                },
-                "Ox Main": {
-                    "channel": 14,
-                    "minangle": 0,
-                    "maxangle": 180,
-                    "safe_angle": 0
-                },
-                "Ox Vent": {
-                    "channel": 15,
-                    "minangle": 0,
-                    "maxangle": 180
-                }
-            },
             "solenoids": {
-                "LED": {
-                    "channel": 0
-                },
-                "SrvPower": {
+                "Fuel": {
                     "channel": 1
+                },
+                "Ox": {
+                    "channel": 2
                 }
             },
             "pyros": {
@@ -49,44 +30,33 @@
                 "baudrate": 921600
             },
             "pts": {
-                "Fuel": {
+                "Chamber": {
                     "channel": 0,
                     "raw": 0,
-                    "gain": 0.00876501,
-                    "offset": 763.21,
+                    "gain": 0.0283109,
+                    "offset": 843.6667,
                     "adc": true
                 },
-                "Chamber": {
+                "FuelCALIBRATED": {
                     "channel": 1,
                     "raw": 0,
                     "gain": 0.0277204,
                     "offset": 862.92551,
                     "adc": true
                 },
-                "Ox": {
+                "OxCALIBRATED": {
                     "channel": 2,
                     "raw": 0,
-                    "gain": 0.00873362,
-                    "offset": 762.5,
+                    "gain": 0.00837989,
+                    "offset": 757.688,
                     "adc": true
-                }
-            },
-            "tcs": {
-                "Temperature Sensor": {
-                    "channel": 1,
+                },
+                "RawChannel": {
+                    "channel": 0,
                     "raw": 0,
-                    "gain": 1,
-                    "offset": 0
-                }
-            },
-            "gps": {
-                "GPS": {
-                    "channel": 2
-                }
-            },
-            "imus": {
-                "IMU": {
-                    "channel": 3
+                    "gain": 0.00837989,
+                    "offset": 757.688,
+                    "adc": true
                 }
             }
         }
