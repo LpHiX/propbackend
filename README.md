@@ -22,7 +22,7 @@ sudo raspi-config
 - Pinouts at https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#gpio
 ```
            TXD    PIN  |  RXD      PIN  |  Communication Port
-uart0 :  GPIO 14    8  |  GPIO 15   10  |  /dev/ttyAMA0
+uart1 :  GPIO 14    8  |  GPIO 15   10  |  /dev/ttyAMA0
 uart2 :  GPIO 0    27  |  GPIO 1    28  |  /dev/ttyAMA2
 uart3 :  GPIO 4     7  |  GPIO 5    29  |  /dev/ttyAMA3
 uart4 :  GPIO 8    24  |  GPIO 9    21  |  /dev/ttyAMA4
