@@ -102,7 +102,7 @@ class StateMachine:
                 desired_state = self.start_end_desiredstate
             else:
                 time_index = 0
-                while T > self.sorted_times[time_index]:
+                while T > self.sorted_times[time_index+1]: #THIS IS +1 BECAUSE OF I AM STUPID
                     time_index += 1
                 desired_state = self.sequencejson["sequence"][self.sorted_timestr[time_index]]
             
@@ -1346,7 +1346,7 @@ async def main(windows=False, emulator=False):
 
             # Perform actions based on current state
             if current_state == MachineStates.STARTTUP:
-                if main_loop_time_keeper.time_since_statechange() > 5:
+                if main_loop_time_keeper.time_since_statechange() > 2:
                     state_machine.set_state(MachineStates.IDLE)
                     command_processor.disarm_all(None)
                     print("State changed to IDLE")
