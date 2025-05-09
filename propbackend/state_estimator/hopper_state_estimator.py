@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from proppibackend.state_estimator.ukf import UKF
+from propbackend.state_estimator.ukf import UKF
 
 
 class HopperStateEstimator:

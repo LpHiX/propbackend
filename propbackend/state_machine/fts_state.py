@@ -1,4 +1,4 @@
-from proppibackend.state_machine.base_state import State
+from propbackend.state_machine.base_state import State
 
 
 class FTSState(State):
@@ -12,7 +12,7 @@ class FTSState(State):
         pass
 
     def can_transition_to(self, target_state) -> tuple[bool, str]:
-        from proppibackend.state_machine.idle_state import IdleState
+        from propbackend.state_machine.idle_state import IdleState
         valid_transitions_anytime = (IdleState)
         if isinstance(target_state, valid_transitions_anytime):
             return True, "Valid transition"

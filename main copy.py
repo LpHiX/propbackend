@@ -14,7 +14,7 @@ import copy
 import numpy as np
 from scipy.linalg import cholesky
 from scipy.spatial.transform import Rotation as R
-from proppibackend.state_machine.state_machine import StateMachine
+from propbackend.state_machine.state_machine import StateMachine
 
 
 

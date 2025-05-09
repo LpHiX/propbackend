@@ -1,4 +1,4 @@
-from proppibackend.commands.command_processor import CommandProcessor
+from propbackend.commands.command_processor import CommandProcessor
 import asyncio
 
 class UDPServer:

@@ -3,8 +3,8 @@ import json
 
 
 if TYPE_CHECKING:
-    from proppibackend.hardware.hardware_handler import HardwareHandler
-    from proppibackend.state_machine.state_machine import StateMachine
+    from propbackend.hardware.hardware_handler import HardwareHandler
+    from propbackend.state_machine.state_machine import StateMachine
 
 
 class CommandProcessor:
@@ -12,6 +12,8 @@ class CommandProcessor:
         self.state_machine = None
         self.hardware_handler = None
         self.commands = {}
+    
+    #TODO CHANGE TO COMMAND REGISTERING LATER
 
     def initialise(self, state_machine: "StateMachine", hardware_handler: "HardwareHandler") -> None:
         self.state_machine = state_machine

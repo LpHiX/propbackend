@@ -1,6 +1,6 @@
-from proppibackend.state_machine import HotfireState
-from proppibackend.state_machine import IdleState
-from proppibackend.state_machine import StateMachine
+from propbackend.state_machine import HotfireState
+from propbackend.state_machine import IdleState
+from propbackend.state_machine import StateMachine
 
 def test_state_machine():
     state_machine = StateMachine()

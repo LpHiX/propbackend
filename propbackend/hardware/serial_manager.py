@@ -5,13 +5,11 @@ import time
 import json
 
 class SerialManager:
-    def __init__(self, board_name, port, baudrate, print_send=False, print_receive=False, emulator=False):
+    def __init__(self, board_name, port, baudrate, emulator=False):
         self.board_name = board_name
         self.emulator = emulator
         self.port = port
         self.baudrate = baudrate
-        self.print_send = print_send
-        self.print_receive = print_receive
         self.running = False
 
         self.read_buffer = {}
@@ -130,8 +128,7 @@ class SerialManager:
             self.writer.write(message.encode())
             await self.writer.drain()
 
-            if self.print_send:
-                print(f"SERIALMANAGER Sent: {message.strip()}")
+            # print(f"SERIALMANAGER Sent: {message.strip()}")
 
             start_time = time.perf_counter()
             timeout_time = 1.0  # 1 second timeout

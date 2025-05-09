@@ -1,19 +1,19 @@
 from __future__ import annotations
 import asyncio
 
-from proppibackend.state_machine.base_state import State
-from proppibackend.utils import debug_logger
-from proppibackend.utils.time_keeper import TimeKeeper
+from propbackend.state_machine.base_state import State
+from propbackend.utils import backend_logger
+from propbackend.utils.time_keeper import TimeKeeper
 
-from proppibackend.state_machine.startup_state import StartupState
-from proppibackend.state_machine.idle_state import IdleState
-from proppibackend.state_machine.engine_abort_state import EngineAbortState
-from proppibackend.state_machine.fts_state import FTSState
-from proppibackend.state_machine.hotfire_state import HotfireState
-from proppibackend.state_machine.launch_state import LaunchState
-from proppibackend.state_machine.hover_state import HoverState
+from propbackend.state_machine.startup_state import StartupState
+from propbackend.state_machine.idle_state import IdleState
+from propbackend.state_machine.engine_abort_state import EngineAbortState
+from propbackend.state_machine.fts_state import FTSState
+from propbackend.state_machine.hotfire_state import HotfireState
+from propbackend.state_machine.launch_state import LaunchState
+from propbackend.state_machine.hover_state import HoverState
 
-from proppibackend.commands.command_processor import CommandProcessor
+from propbackend.commands.command_processor import CommandProcessor
 
 
 
@@ -40,15 +40,15 @@ class StateMachine:
         if self._state is not None:
             transition_valid, reason = self._state.can_transition_to(state)
             if not transition_valid:
-                debug_logger.debug(f"Attempted transition from {type(self._state).__name__} to {type(state).__name__} failed, Reason: {reason}")
+                backend_logger.debug(f"Attempted transition from {type(self._state).__name__} to {type(state).__name__} failed, Reason: {reason}")
                 return
             self._state.teardown()
-        debug_logger.info(f"Transitioning from {type(self._state).__name__} to {type(state).__name__}")
+        backend_logger.info(f"Transitioning from {type(self._state).__name__} to {type(state).__name__}")
         self._state = state
         self._state.state_machine = self
         self._state.setup()
         self.time_keeper.statechange()
-        debug_logger.debug(f"State {type(self._state).__name__} setup complete")
+        backend_logger.debug(f"State {type(self._state).__name__} setup complete")
 
     async def main_loop(self) -> None:
         self.time_keeper.cycle_start()

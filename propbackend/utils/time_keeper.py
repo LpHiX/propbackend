@@ -1,6 +1,6 @@
 import asyncio
 import time
-from proppibackend.utils import debug_logger
+from propbackend.utils import backend_logger
 
 class TimeKeeper:
     def __init__(self, name, cycle_time, debug_time=0.0):
@@ -20,7 +20,7 @@ class TimeKeeper:
         self.cycle_starttime = time.perf_counter()
         if self.debug_time > 0:
             if(self.cycle % (self.debug_time / self.cycle_time) == 0):
-                debug_logger.debug(f"TimeKeeper {self.name} is at cycle {self.cycle} at {time.perf_counter() - self.start_time:.5f} seconds")
+                backend_logger.debug(f"TimeKeeper {self.name} is at cycle {self.cycle} at {time.perf_counter() - self.start_time:.5f} seconds")
 
     def time_since_start(self) -> float:
         return time.perf_counter() - self.start_time

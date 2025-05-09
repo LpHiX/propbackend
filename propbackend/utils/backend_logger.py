@@ -4,19 +4,19 @@ import sys
 from datetime import datetime
 from typing import Optional
 
-class _DebugLoggerSingleton:
-    _instance: Optional['_DebugLoggerSingleton'] = None
+class _BackendLoggerSingleton:
+    _instance: Optional['_BackendLoggerSingleton'] = None
     _logger: Optional[logging.Logger] = None
     
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(_DebugLoggerSingleton, cls).__new__(cls)
+            cls._instance = super(_BackendLoggerSingleton, cls).__new__(cls)
             cls._instance._initialize_logger()
         return cls._instance
     
     def _initialize_logger(self) -> None:
         """Initialize the logger with console and file handlers"""
-        self._logger = logging.getLogger('proppi_debug')
+        self._logger = logging.getLogger('backend_logger')
         self._logger.setLevel(logging.DEBUG)
         self._logger.propagate = False
         
@@ -36,7 +36,7 @@ class _DebugLoggerSingleton:
         # log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
         # os.makedirs(log_dir, exist_ok=True)
         # timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        # log_file = os.path.join(log_dir, f'proppi_debug_{timestamp}.log')
+        # log_file = os.path.join(log_dir, f'backend_logger_{timestamp}.log')
         
         # file_handler = logging.FileHandler(log_file)
         # file_handler.setLevel(logging.DEBUG)
@@ -68,5 +68,5 @@ class _DebugLoggerSingleton:
         """Log an exception with traceback"""
         self._logger.exception(message)
 
-# Create the singleton instance with the specific name 'debug_logger'
-debug_logger = _DebugLoggerSingleton()
+# Create the singleton instance with the specific name 'backend_logger'
+backend_logger = _BackendLoggerSingleton()

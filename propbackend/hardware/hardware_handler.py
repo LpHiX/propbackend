@@ -1,6 +1,7 @@
 import json
-from .board import Board
-from .serial_manager import SerialManager
+from propbackend.hardware.board import Board
+from propbackend.hardware.serial_manager import SerialManager
+from propbackend.utils.backend_logger import backend_logger
 import copy
 
 class HardwareHandler:
@@ -21,10 +22,10 @@ class HardwareHandler:
                 json.dump(self.config, file, indent=4)
         # Initialize serial managers for each board in the configuration
         if 'boards' not in self.config:
-            print("No boards found in configuration, json error")
+            backend_logger.error("No boards found in configuration, json error")
             return
         if 'state_defaults' not in self.config:
-            print("No state defaults found in configuration, json error")
+            backend_logger.error("No state defaults found in configuration, json error")
             return
         self.state_defaults: dict = self.config['state_defaults']
         self.hardware_types = list(self.state_defaults.keys())

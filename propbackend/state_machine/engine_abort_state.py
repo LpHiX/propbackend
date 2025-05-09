@@ -13,8 +13,8 @@ class EngineAbortState(State):
         pass
 
     def can_transition_to(self, target_state) -> tuple[bool, str]:
-        from proppibackend.state_machine.idle_state import IdleState
-        from proppibackend.state_machine.fts_state import FTSState
+        from propbackend.state_machine.idle_state import IdleState
+        from propbackend.state_machine.fts_state import FTSState
         valid_transitions_anytime = (IdleState, FTSState)
         if isinstance(target_state, valid_transitions_anytime):
             return True, "Valid transition"
