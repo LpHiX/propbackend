@@ -17,18 +17,28 @@ import copy
 from proppibackend.state_machine.state_machine import StateMachine
 from proppibackend.utils.signal_handler import SignalHandler
 from proppibackend.utils import debug_logger
+from proppibackend.commands.udp_server import UDPServer
+from proppibackend.commands.command_processor import CommandProcessor
+from proppibackend.hardware.hardware_handler import HardwareHandler
 
 def try_uvloop() -> bool:
     try:
         import uvloop
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-        print("Using uvloop for enhanced performance")
     except ImportError:
-        print("uvloop not available. Run: pip install uvloop for better performance")
+        debug_logger.critical("uvloop not available. Run: pip install uvloop for better performance")
 
 async def main() -> None:
-    state_machine = StateMachine()
-    signal_handler = SignalHandler(None)
+    hardware_handler = HardwareHandler()
+    await hardware_handler.initialize()
+
+    command_processor = CommandProcessor()
+    state_machine = StateMachine(command_processor)
+    udp_server = UDPServer(command_processor)
+
+    command_processor.initialise(hardware_handler, state_machine)
+    
+    signal_handler = SignalHandler(udp_server)
         
     #signal_handler.add_shutdown_task(lambda: debug_logger.info("Shutting down state machine..."))
     
@@ -47,8 +57,9 @@ if __name__ == "__main__":
     debug_logger.info("=====================Starting backend...======================")
     if platform.system() != "Windows":
         try_uvloop()
-        debug_logger.info("Running on non-Windows - using uvloop for enhanced performance")
+        #debug_logger.info("Running on non-Windows - using uvloop for enhanced performance")
     else:
-        debug_logger.info("Running on Windows - standard event loop will be used")
+        pass
+        #debug_logger.info("Running on Windows - standard event loop will be used")
 
     asyncio.run(main())

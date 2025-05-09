@@ -1,12 +1,11 @@
+from proppibackend.commands.command_processor import CommandProcessor
 import asyncio
 
 class UDPServer:
-    def __init__(self, command_processor: CommandProcessor, host='0.0.0.0', port=8888, print_send=False, print_receive=False):
+    def __init__(self, command_processor: CommandProcessor, host='0.0.0.0', port=8888):
         self.command_processor = command_processor
         self.host = host
         self.port = port
-        self.print_send = print_send
-        self.print_receive = print_receive
 
         self.transport = None
         self.protocol = None

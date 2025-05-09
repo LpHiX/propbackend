@@ -1,12 +1,10 @@
 import json
 from .board import Board
-from ..interfaces.serial_manager import SerialManager
+from .serial_manager import SerialManager
 import copy
 
 class HardwareHandler:
-    def __init__(self, emulator: bool = False, debug_prints: bool = False):
-        self.emulator: bool = emulator
-        self.debug_prints: bool = debug_prints
+    def __init__(self):
         self.boards: list[Board] = []
         self.state_defaults: dict = {}
         self.hardware_types: list[str] = []
@@ -43,9 +41,6 @@ class HardwareHandler:
                         board_name,
                         port=serial_config['port'],
                         baudrate=serial_config['baudrate'],
-                        #print_send=self.debug_prints,
-                        #print_receive=self.debug_prints,
-                        emulator=self.emulator
                     )
                     if await serial_manager.initialize():                        
                         print(f"Initialized serial connection for board: {board_name}")

@@ -13,7 +13,7 @@ from proppibackend.state_machine.hotfire_state import HotfireState
 from proppibackend.state_machine.launch_state import LaunchState
 from proppibackend.state_machine.hover_state import HoverState
 
-
+from proppibackend.commands.command_processor import CommandProcessor
 
 
 
@@ -27,7 +27,9 @@ class StateMachine:
         LaunchState: {HoverState, EngineAbortState, FTSState},
         HoverState: {IdleState, EngineAbortState, FTSState},
     }
-    def __init__(self) -> None:
+    def __init__(self, command_processor: CommandProcessor) -> None:
+        self.command_processor = command_processor
+
         self._state: State | None = None
         self.time_keeper = TimeKeeper(name="StateMachineTimeKeeper", cycle_time=0.001, debug_time=1)
         self.transition_to(StartupState())

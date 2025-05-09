@@ -1,11 +1,19 @@
-from ..hardware import HardwareHandler
-from ..state_machine import StateMachine
+from typing import TYPE_CHECKING
 import json
 
 
+if TYPE_CHECKING:
+    from proppibackend.hardware.hardware_handler import HardwareHandler
+    from proppibackend.state_machine.state_machine import StateMachine
+
+
 class CommandProcessor:
-    
-    def __init__(self, state_machine: StateMachine, hardware_handler: HardwareHandler):
+    def __init__(self) -> None:
+        self.state_machine = None
+        self.hardware_handler = None
+        self.commands = {}
+
+    def initialise(self, state_machine: "StateMachine", hardware_handler: "HardwareHandler") -> None:
         self.state_machine = state_machine
         self.hardware_handler = hardware_handler
         self.commands = {
