@@ -1,6 +1,6 @@
 {
-    "time_before_ignition": 5,
-    "hotfire_safing_time": 5,
+    "time_before_ignition": 2,
+    "hotfire_safing_time": 2,
     "start_end_desiredstate": {
         "ActuatorBoard": {
             "solenoids": {
@@ -30,13 +30,13 @@
                 "solenoids": {
                     "Fuel": {
                         "channel": 1,
-                        "armed": true,
-                        "powered": true
+                        "armed": false,
+                        "powered": false
                     },
                     "Ox": {
                         "channel": 2,
-                        "armed": false,
-                        "powered": false
+                        "armed": true,
+                        "powered": true
                     }
                 },
                 "pyros": {
@@ -71,7 +71,30 @@
                 }
             }
         },
-        "1.2": {
+        "0.5": {
+            "ActuatorBoard": {
+                "solenoids": {
+                    "Fuel": {
+                        "channel": 1,
+                        "armed": true,
+                        "powered": true
+                    },
+                    "Ox": {
+                        "channel": 2,
+                        "armed": true,
+                        "powered": true
+                    }
+                },
+                "pyros": {
+                    "Igniter": {
+                        "channel": 0,
+                        "armed": false,
+                        "powered": false
+                    }
+                }
+            }
+        },
+        "5": {
             "ActuatorBoard": {
                 "solenoids": {
                     "Fuel": {

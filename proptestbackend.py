@@ -231,7 +231,7 @@ class SerialManager:
 
                 try:
                     message_json = json.loads(data)
-                    #print(f"SERIALMANAGER JSON: {json.dumps(message_json, indent=4)}")
+                    print(f"SERIALMANAGER JSON: {json.dumps(message_json, indent=4)}")
                     if "send_id" in message_json:
                         send_id = message_json["send_id"]
                         async with self.buffer_lock:
@@ -1329,8 +1329,8 @@ async def main(windows=False, emulator=False):
     main_loop_time_keeper = TimeKeeper(name="MainLoop", cycle_time=0.01, debug_time=60.0)
     state_machine.set_time_keeper(main_loop_time_keeper)
     
-    #main_loop_logger = BoardStateLogger("MainLoop", hardware_handler)
-    #main_loop_logger.write_headers(hardware_handler.boards)
+    main_loop_logger = BoardStateLogger("MainLoop", hardware_handler)
+    main_loop_logger.write_headers(hardware_handler.boards)
 
 
     try:
@@ -1371,8 +1371,8 @@ async def main(windows=False, emulator=False):
             elif current_state == MachineStates.HOTFIRE:
                 if main_loop_time_keeper.cycle == 0:
                     recurring_taskhandler.set_tasks_active()
-                    #hotfire_logger = BoardStateLogger("HotfireLog", hardware_handler)
-                    #hotfire_logger.write_headers(hardware_handler.boards)
+                    hotfire_logger = BoardStateLogger("HotfireLog", hardware_handler)
+                    hotfire_logger.write_headers(hardware_handler.boards)
 
                 
                 time_since_statechange = main_loop_time_keeper.time_since_statechange()
@@ -1384,11 +1384,11 @@ async def main(windows=False, emulator=False):
                 for board_name, desired_state in board_desiredstates.items():
                     hardware_handler.update_board_desired_state(board_name, desired_state)
                 
-                #hotfire_logger.write_data(hardware_handler.boards)
+                hotfire_logger.write_data(hardware_handler.boards)
 
                 if state_machine.hotfirecontroller.is_hotfire_complete(time_since_statechange):
                     print(f"HOTFIRE COMPLETE at T{T:.2f}s")
-                    #hotfire_logger.close()
+                    hotfire_logger.close()
                     state_machine.set_state(MachineStates.IDLE)
                     main_loop_time_keeper.statechange()
                     command_processor.disarm_all(None)
@@ -1411,8 +1411,8 @@ async def main(windows=False, emulator=False):
                 hardware_handler = hardware_handler.update_board_desired_state("ActuatorBoard", desired_states)
             
             # Sleep to avoid excessive CPU usage
-            #if main_loop_time_keeper.cycle % 10 == 0:
-                #main_loop_logger.write_data(hardware_handler.boards)
+            if main_loop_time_keeper.cycle % 10 == 0:
+                main_loop_logger.write_data(hardware_handler.boards)
             await main_loop_time_keeper.cycle_end()
 
     except KeyboardInterrupt:
