@@ -1,8 +1,8 @@
 {
     "boards": {
         "ActuatorBoard": {
-            "active_interval": 0.05,
-            "idle_interval": 0.05,
+            "active_interval": 0.02,
+            "idle_interval": 0.02,
             "is_actuator": true,
             "serial": {
                 "port": "/dev/ttyAMA2",
@@ -23,8 +23,8 @@
             }
         },
         "Sensorboard0": {
-            "active_interval": 0.02,
-            "idle_interval": 0.02,
+            "active_interval": 0.015,
+            "idle_interval": 0.015,
             "serial": {
                 "port": "/dev/ttyAMA0",
                 "baudrate": 921600
@@ -34,21 +34,21 @@
                     "channel": 0,
                     "raw": 0,
                     "gain": 0.028169,
-                    "offset": 841,
+                    "offset": 859,
                     "adc": true
                 },
                 "FuelCALIBRATED": {
                     "channel": 1,
                     "raw": 0,
                     "gain": 0.00842697,
-                    "offset": 742.33333,
+                    "offset": 746.5,
                     "adc": true
                 },
                 "OxCALIBRATED": {
                     "channel": 3,
                     "raw": 0,
                     "gain": 0.0287081,
-                    "offset": 858.16667,
+                    "offset": 868.16667,
                     "adc": true
                 }
             }
