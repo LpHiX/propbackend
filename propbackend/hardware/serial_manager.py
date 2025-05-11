@@ -4,10 +4,16 @@ import serial
 import time
 import json
 
+from propbackend.utils.config_reader import config_reader
+from propbackend.utils import backend_logger
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from propbackend.hardware.hardware_handler import HardwareHandler
+
 class SerialManager:
-    def __init__(self, board_name, port, baudrate, emulator=False):
+    def __init__(self, board_name, port, baudrate, hardware_handler: "HardwareHandler"):
         self.board_name = board_name
-        self.emulator = emulator
         self.port = port
         self.baudrate = baudrate
         self.running = False
@@ -20,24 +26,24 @@ class SerialManager:
         self.cleanup_queue = []  # Will store (timestamp, id) tuples
         self.cleanup_lock = asyncio.Lock()
 
+        self.hardware_handler = hardware_handler
+
+        # This is why all three are required:
+        # - Send_recieve queues a message to be read, and waits for a read buffer
+        # - Read_loop reads from the serial port and puts it in the read buffer
+        # - Readbuffer_cleanloop cleans up the read buffer
+
         self.reader = None
         self.writer = None
 
     async def initialize(self):
-        """Initialize the serial connection"""
-        if self.emulator:
-            print("SERIALMANAGER Emulator mode - no serial connection")
-            return None
-        
-        return await self._initialize_serial()
-
-    async def _initialize_serial(self):
+        """Initialize the serial connection"""        
         try:
             self.reader, self.writer = await serial_asyncio.open_serial_connection(
                 url=self.port,
                 baudrate=self.baudrate
             )
-            print(f"SERIALMANAGER Serial port {self.port} opened at {self.baudrate} baud for board {self.board_name}")
+            backend_logger.info(f"SERIALMANAGER Serial port {self.port} opened at {self.baudrate} baud for board {self.board_name}")
             
             # Start the background reading thread
             self.running = True
@@ -48,7 +54,7 @@ class SerialManager:
             return True
             
         except serial.SerialException as e:
-            print(f"SERIALMANAGER Error opening port {self.port}: {e}")
+            backend_logger.error(f"SERIALMANAGER Error opening port {self.port}: {e}")
             self.reader = None
             self.writer = None
             return False
@@ -65,8 +71,7 @@ class SerialManager:
                 if not data:
                     continue
 
-                if self.print_receive:
-                    print(f"SERIALMANAGER Received: {data}")
+                backend_logger.debug(f"SERIALMANAGER Received: {data}")
 
                 try:
                     message_json = json.loads(data)
@@ -80,7 +85,7 @@ class SerialManager:
                         async with self.cleanup_lock:
                             self.cleanup_queue.append((cleanup_time, send_id))
                 except json.JSONDecodeError:
-                    print(f"SERIALMANAGER JSON Decode error: {data}")
+                    backend_logger.error(f"SERIALMANAGER JSON Decode error: {data}")
             except Exception as e:
                 print(f"SERIALMANAGER Read error: {e}")
                 await asyncio.sleep(0.1)  # Longer sleep on error
@@ -113,11 +118,11 @@ class SerialManager:
                 print(f"SERIALMANAGER Cleanup error: {e}")
                 await asyncio.sleep(0.1)
 
-    async def send_receive(self, message_json:dict) -> str:
+    async def send_receive(self, message_json:dict) -> None:
         """Send message to serial port (non-blocking)"""
         if not self.writer:
-            #print("SERIALMANAGER Error: Serial port not open")
-            return "SERIALMANAGER Error: Serial port not open"
+            backend_logger.error("SERIALMANAGER Error: Serial port not open")
+            return None
         try:
             async with self.send_id_lock:
                 send_id = self.send_id
@@ -132,19 +137,18 @@ class SerialManager:
 
             start_time = time.perf_counter()
             timeout_time = 1.0  # 1 second timeout
-            while True:
+            while time.perf_counter() - start_time < timeout_time:
                 async with self.buffer_lock:
                     if send_id in self.read_buffer:
                         response = json.dumps(self.read_buffer[send_id])
                         del self.read_buffer[send_id]
-                        return response
-                if time.perf_counter() - start_time > timeout_time:
-                    print(f"SERIALMANAGER Timeout waiting for response with send_id {send_id} for board {self.board_name}")
-                    return f"SERIALMANAGER Timeout waiting for response with send_id {send_id} for board {self.board_name}"
+                        self.hardware_handler.update_board_state(self.board_name, response)
+                        break
                 await asyncio.sleep(0.001)
+            if time.perf_counter() - start_time > timeout_time:
+                print(f"SERIALMANAGER Timeout waiting for response with send_id {send_id} for board {self.board_name}")
         except Exception as e:
             print(f"SERIALMANAGER Send error: {e}")
-            return f"SERIALMANAGER Send error: {e}"
 
     def is_connected(self):
         """Check if serial connection is active"""
@@ -161,4 +165,4 @@ class SerialManager:
 
         if self.writer:
             self.writer.close()
-            print(f"SERIALMANAGER Serial port {self.port} closed")
+            backend_logger.info(f"SERIALMANAGER Serial port {self.port} closed")

@@ -31,7 +31,7 @@ class StateMachine:
         self.command_processor = command_processor
 
         self._state: State | None = None
-        self.time_keeper = TimeKeeper(name="StateMachineTimeKeeper", cycle_time=0.001, debug_time=1)
+        self.time_keeper = TimeKeeper(name="StateMachineTimeKeeper", cycle_time=0.001, debug_time=60)
         self.transition_to(StartupState())
 
     

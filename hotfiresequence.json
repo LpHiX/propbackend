@@ -1,83 +1,98 @@
 {
-    "time_before_ignition": 15,
+    "time_before_ignition": 5,
     "hotfire_safing_time": 5,
     "start_end_desiredstate": {
         "ActuatorBoard": {
-            "servos": {
-                "Fuel Main": {
-                    "channel": 15,
-                    "armed": true,
-                    "angle": 0
-                },
-                "Ox Main": {
-                    "channel": 14,
-                    "armed": true,
-                    "angle": 0
-                },
-                "Ox Vent": {
-                    "channel": 13,
+            "solenoids": {
+                "Fuel": {
+                    "channel": 1,
                     "armed": false,
-                    "angle": 0
+                    "powered": false
+                },
+                "Ox": {
+                    "channel": 2,
+                    "armed": false,
+                    "powered": false
                 }
             },
-            "solenoids": {
-                "LED": {
-                    "channel": 40,
-                    "armed": true,
-                    "powered": true
+            "pyros": {
+                "Igniter": {
+                    "channel": 0,
+                    "armed": false,
+                    "powered": false
                 }
             }
         }
     },
     "sequence": {
-        "-1": {
-            "ActuatorBoard": {
-                "servos": {
-                    "Fuel Main": {
-                        "channel": 15,
-                        "armed": true,
-                        "angle": 0
-                    },
-                    "Ox Main": {
-                        "channel": 14,
-                        "armed": true,
-                        "angle": 0
-                    }
-                }
-            }
-        },
         "0": {
             "ActuatorBoard": {
-                "servos": {
-                    "Fuel Main": {
-                        "channel": 15,
+                "solenoids": {
+                    "Fuel": {
+                        "channel": 1,
                         "armed": true,
-                        "angle": 120
+                        "powered": true
                     },
-                    "Ox Main": {
-                        "channel": 14,
+                    "Ox": {
+                        "channel": 2,
+                        "armed": false,
+                        "powered": false
+                    }
+                },
+                "pyros": {
+                    "Igniter": {
+                        "channel": 0,
                         "armed": true,
-                        "angle": 120
+                        "powered": true
                     }
                 }
             }
         },
-        "0.5": {
+        "0.2": {
             "ActuatorBoard": {
-                "servos": {
-                    "Fuel Main": {
-                        "channel": 15,
+                "solenoids": {
+                    "Fuel": {
+                        "channel": 1,
                         "armed": true,
-                        "angle": 180
+                        "powered": true
                     },
-                    "Ox Main": {
-                        "channel": 14,
+                    "Ox": {
+                        "channel": 2,
                         "armed": true,
-                        "angle": 180
+                        "powered": true
+                    }
+                },
+                "pyros": {
+                    "Igniter": {
+                        "channel": 0,
+                        "armed": true,
+                        "powered": true
                     }
                 }
             }
         },
-        "5": {}
+        "1.2": {
+            "ActuatorBoard": {
+                "solenoids": {
+                    "Fuel": {
+                        "channel": 1,
+                        "armed": false,
+                        "powered": false
+                    },
+                    "Ox": {
+                        "channel": 2,
+                        "armed": false,
+                        "powered": false
+                    }
+                },
+                "pyros": {
+                    "Igniter": {
+                        "channel": 0,
+                        "armed": false,
+                        "powered": false
+                    }
+                }
+            }
+        }
     }
 }

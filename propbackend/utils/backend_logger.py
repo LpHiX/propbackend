@@ -27,8 +27,21 @@ class _BackendLoggerSingleton:
         # Create console handler
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.DEBUG)
-        console_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        console_handler.setFormatter(console_format)
+
+        class ColorFormatter(logging.Formatter):
+            RED = '\033[91m'
+            RESET = '\033[0m'
+            FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
+
+            def format(self, record):
+                log_fmt = self.FORMAT
+                if record.levelno == logging.ERROR or record.levelno == logging.CRITICAL:
+                    log_fmt = self.RED + self.FORMAT + self.RESET
+                formatter = logging.Formatter(log_fmt)
+                return formatter.format(record)
+
+        console_handler.setFormatter(ColorFormatter())
+
         self._logger.addHandler(console_handler)
 
         

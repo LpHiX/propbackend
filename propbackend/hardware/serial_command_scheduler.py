@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING
 from propbackend.utils.time_keeper import TimeKeeper
+from propbackend.utils import backend_logger
+from propbackend.utils import config_reader
 import asyncio
 
 # HARDWARD DEFAULTS DONT EXIST YET
@@ -22,7 +24,7 @@ class SerialCommandScheduler:
     def create_command(self):
         if not self.board.is_actuator:
             message = {"timestamp": 0}
-            for hw_type in self.hardware_types:
+            for hw_type in config_reader.get_hardware_types():
                 if hw_type in self.board.state:
                     message[hw_type] = {}
                     for item_name, item_data in self.board.state[hw_type].items():
