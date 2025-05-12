@@ -63,6 +63,9 @@ class SerialManager:
         """Background thread that continuously reads from serial port"""
         while self.running:
             try:
+                if not self.reader:
+                    await asyncio.sleep(0.1)
+                    continue
                 line = await self.reader.readline()
                 if not line:
                     continue
@@ -148,11 +151,11 @@ class SerialManager:
                         break
                 await asyncio.sleep(0.001)
             if time.perf_counter() - start_time > timeout_time:
-                print(f"SERIALMANAGER Timeout waiting for response with send_id {send_id} for board {self.board.name}")
+                backend_logger.warning(f"SERIALMESSAGE Timeout waiting for response with send_id {send_id} for board {self.board.name}")
         except json.JSONDecodeError as e:
             backend_logger.error(f"SERIALMANAGER JSON Decode error: {e}")
         except Exception as e:
-            backend_logger.error(f"SERIALMANAGER Send_recieve error: {e}", exc_info=True)
+            backend_logger.error(f"SERIALMANAGER Send_receive error: {e}", exc_info=True)
 
     def is_connected(self):
         """Check if serial connection is active"""

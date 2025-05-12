@@ -1,7 +1,7 @@
 {
     "boards": {
         "ActuatorBoard": {
-            "polling_interval": 0.02,
+            "polling_interval": 0.3,
             "is_actuator": true,
             "serial": {
                 "port": "/dev/ttyAMA0",
@@ -18,36 +18,6 @@
             "pyros": {
                 "Igniter": {
                     "channel": 0
-                }
-            }
-        },
-        "Sensorboard0": {
-            "polling_interval": 0.015,
-            "serial": {
-                "port": "/dev/ttyAMA0",
-                "baudrate": 921600
-            },
-            "pts": {
-                "Chamber": {
-                    "channel": 0,
-                    "raw": 0,
-                    "gain": 0.028169,
-                    "offset": 859,
-                    "adc": true
-                },
-                "FuelCALIBRATED": {
-                    "channel": 1,
-                    "raw": 0,
-                    "gain": 0.00842697,
-                    "offset": 746.5,
-                    "adc": true
-                },
-                "OxCALIBRATED": {
-                    "channel": 3,
-                    "raw": 0,
-                    "gain": 0.0287081,
-                    "offset": 868.16667,
-                    "adc": true
                 }
             }
         }

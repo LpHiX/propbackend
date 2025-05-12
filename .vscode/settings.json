@@ -8,5 +8,7 @@
         "**/__pycache__": true,
         "**/*.pytest_cache": true,
         "**/*.vscode": true
-    }
+    },
+    "python.analysis.typeCheckingMode": "standard",
+    "python.analysis.autoImportCompletions": false
 }

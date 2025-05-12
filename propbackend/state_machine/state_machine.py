@@ -13,7 +13,7 @@ from propbackend.state_machine.hotfire_state import HotfireState
 from propbackend.state_machine.launch_state import LaunchState
 from propbackend.state_machine.hover_state import HoverState
 
-from propbackend.commands.command_processor import CommandProcessor
+from propbackend.hardware.hardware_handler import HardwareHandler
 
 
 
@@ -27,11 +27,11 @@ class StateMachine:
         LaunchState: {HoverState, EngineAbortState, FTSState},
         HoverState: {IdleState, EngineAbortState, FTSState},
     }
-    def __init__(self, command_processor: CommandProcessor) -> None:
-        self.command_processor = command_processor
+    def __init__(self, hardware_handler: HardwareHandler) -> None:
+        self.hardware_handler = hardware_handler
 
         self._state: State | None = None
-        self.time_keeper = TimeKeeper(name="StateMachineTimeKeeper", cycle_time=0.001, debug_time=60)
+        self.time_keeper = TimeKeeper(name="StateMachineTimeKeeper", cycle_time=0.1, debug_time=60)
         self.transition_to(StartupState())
 
     
@@ -54,8 +54,12 @@ class StateMachine:
 
     async def main_loop(self) -> None:
         self.time_keeper.cycle_start()
-        self._state.loop()
+        if self._state is not None:
+            self._state.loop()
+        else:
+            backend_logger.error("State machine is not initialized")
         await self.time_keeper.cycle_end()
 
     def get_state(self) -> State:
+        assert self._state is not None, "StateMachine has no state"
         return self._state

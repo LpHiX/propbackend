@@ -3,13 +3,15 @@ from propbackend.utils import backend_logger
 import asyncio
 import serial_asyncio
 
+from typing import cast
+
 class UDPServer:
     def __init__(self, command_processor: CommandProcessor, host='0.0.0.0', port=8888):
         self.command_processor = command_processor
         self.host = host
         self.port = port
 
-        self.transport = None
+        self.transport = cast(asyncio.DatagramTransport, None)
         self.protocol = None
 
         asyncio.create_task(self._start_server())

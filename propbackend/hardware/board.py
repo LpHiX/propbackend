@@ -4,6 +4,9 @@ from propbackend.utils import config_reader
 from propbackend.hardware.serial_command_scheduler import SerialCommandScheduler
 import asyncio
 import copy
+import json
+
+from typing import cast
 
 class Board:
     def __init__(self, name: str, board_config: dict):
@@ -11,8 +14,8 @@ class Board:
         self.board_config: dict = board_config
 
 
-        self.serialmanager: SerialManager = None
-        self.scheduler: SerialCommandScheduler = None
+        self.serialmanager: SerialManager = cast(SerialManager, None)
+        self.scheduler: SerialCommandScheduler = cast(SerialCommandScheduler, None)
         self.state: dict = {}
         self.desired_state: dict = {}
 
@@ -26,14 +29,14 @@ class Board:
         
         self.is_actuator: bool = board_config.get('is_actuator', False)
         if self.is_actuator:
-            desired_state = copy.deepcopy(self.state) # WHAT THE FUCK, NESTED DICTIONARIES WERE STILL REFERENCE BASED, LEADING TO UPDATING DESIRED STATES UPDATING ACTUAL STATES
+            self.desired_state = copy.deepcopy(self.state) # WHAT THE FUCK, NESTED DICTIONARIES WERE STILL REFERENCE BASED, LEADING TO UPDATING DESIRED STATES UPDATING ACTUAL STATES
             if "servos" in board_config:
-                desired_state["servos"] = {}
+                self.desired_state["servos"] = {}
                 for servo_name, servo_data in board_config["servos"].items():
-                    desired_state["servos"][servo_name] = {"channel": servo_data['channel'], "armed": False}
+                    self.desired_state["servos"][servo_name] = {"channel": servo_data['channel'], "armed": False}
                     if 'safe_angle' in servo_data:
-                        desired_state["servos"][servo_name]["armed"] = True
-                        desired_state["servos"][servo_name]["angle"] = servo_data['safe_angle']
+                        self.desired_state["servos"][servo_name]["armed"] = True
+                        self.desired_state["servos"][servo_name]["angle"] = servo_data['safe_angle']
         
 
     async def initialise_serial(self) -> bool:
@@ -66,10 +69,11 @@ class Board:
     def update_state(self, new_state: dict) -> None:
         for hw_type in config_reader.get_hardware_types():
             if hw_type in new_state and hw_type in self.state:  #Only update state if defined in config
-                for item_name, item_data in new_state[hw_type].items():
-                    if item_name in self.state[hw_type]:
-                        for key, value in item_data.items():
-                            self.state[hw_type][item_name][key] = value
+                if new_state[hw_type] is not None:
+                    for item_name, item_data in new_state[hw_type].items():
+                        if item_name in self.state[hw_type]:
+                            for key, value in item_data.items():
+                                self.state[hw_type][item_name][key] = value
 
     def update_desired_state(self, new_desired_state: dict) -> None:
         for hw_type in config_reader.get_hardware_types():

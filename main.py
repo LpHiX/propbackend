@@ -1,5 +1,6 @@
 import asyncio
 import platform
+import signal
 
 from propbackend.state_machine.state_machine import StateMachine
 from propbackend.utils.signal_handler import SignalHandler
@@ -8,7 +9,7 @@ from propbackend.commands.udp_server import UDPServer
 from propbackend.commands.command_processor import CommandProcessor
 from propbackend.hardware.hardware_handler import HardwareHandler
 
-def try_uvloop() -> bool:
+def try_uvloop() -> None:
     try:
         import uvloop
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -20,7 +21,7 @@ async def main() -> None:
     await hardware_handler.initialize()
 
     command_processor = CommandProcessor()
-    state_machine = StateMachine(command_processor)
+    state_machine = StateMachine(hardware_handler)
     udp_server = UDPServer(command_processor)
 
     command_processor.initialise(state_machine, hardware_handler)
@@ -28,7 +29,6 @@ async def main() -> None:
     signal_handler = SignalHandler(udp_server)
         
     #signal_handler.add_shutdown_task(lambda: debug_logger.info("Shutting down state machine..."))
-    
 
     try:
         while True:
@@ -39,7 +39,7 @@ async def main() -> None:
     except KeyboardInterrupt:
         # Fallback if the signal handler doesn't catch it
         backend_logger.info("KeyboardInterrupt caught in main(), shutting down...")
-        signal_handler.handle_sigint()
+        signal_handler.handle_signal(signal.SIGINT, None)
 
 if __name__ == "__main__":
     backend_logger.info("=====================Starting backend...======================")

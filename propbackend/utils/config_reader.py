@@ -55,7 +55,7 @@ class _ConfigReaderSingleton:
             return {}
         return self._state_defaults
     
-    def get_hardware_types(self) -> list:
+    def get_hardware_types(self) -> list[str]:
         if not self._state_defaults:
             backend_logger.error("State defaults configuration is empty. Please check the hardware_config.json file.")
             return []

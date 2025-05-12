@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, cast
 import json
 import asyncio
 from datetime import datetime
@@ -16,15 +16,15 @@ if TYPE_CHECKING:
 
 class CommandProcessor:
     def __init__(self) -> None:
-        self.state_machine = None
-        self.hardware_handler = None
+        self._state_machine: Optional["StateMachine"] = None
+        self._hardware_handler: Optional["HardwareHandler"] = None
         self.commands = {}
     
     #TODO CHANGE TO COMMAND REGISTERING LATER
 
     def initialise(self, state_machine: "StateMachine", hardware_handler: "HardwareHandler") -> None:
-        self.state_machine = state_machine
-        self.hardware_handler = hardware_handler
+        self._state_machine = state_machine
+        self._hardware_handler = hardware_handler
         self.commands = {
             "get hardware json": self.get_hardware_json,
             # "set hardware json": self.set_hardware_json,
@@ -32,7 +32,7 @@ class CommandProcessor:
             # "send receive": self.send_receive,
             "get state": self.get_state,
             "update desired state": self.update_desired_state,
-            "disarm all": self.disarm_all,
+            # "disarm all": self.disarm_all,
             # "get hotfire sequence": self.get_hotfire_sequences,
             # "set hotfire sequence": self.set_hotfire_sequences,
             "start hotfire sequence": self.start_hotfire_sequence,
@@ -44,7 +44,19 @@ class CommandProcessor:
             "return to idle": self.return_to_idle,
         }
     
-    async def process_message(self, command):
+    @property
+    def state_machine(self) -> "StateMachine":
+        if self._state_machine is None:
+            raise RuntimeError("StateMachine has not been initialised")
+        return cast("StateMachine", self._state_machine)
+
+    @property
+    def hardware_handler(self) -> "HardwareHandler":
+        if self._hardware_handler is None:
+            raise RuntimeError("HardwareHandler has not been initialised")
+        return cast("HardwareHandler", self._hardware_handler)
+
+    async def process_message(self, command) -> str:
         try:
             message_json = json.loads(command)
         except json.JSONDecodeError:
@@ -71,20 +83,21 @@ class CommandProcessor:
         return self.reply_str("get state", state.name)
 
     def get_time(self, _):
-        # if self.state_machine.time_keeper is None:
-        #     hotfire_timestr = "TimeKeeperError"
-        # else:
-        #     hotfire_timestr = "T= Idling"
-        # if self.state_machine.get_state() == MachineStates.HOTFIRE:
-        #     hotfire_time = self.state_machine.hotfirecontroller.get_T(self.state_machine.time_keeper.time_since_statechange())
-        #     if hotfire_time > 0:
-        #         hotfire_timestr = f"T= +{hotfire_time:.2f} s"                
-        #     else:
-        #         hotfire_timestr = f"T= {hotfire_time:.2f} s"
+        if self.state_machine.time_keeper is None:
+            hotfire_timestr = "TimeKeeperError"
+        else:
+            hotfire_timestr = "T= Idling"
+        state = self.state_machine.get_state()
+        if isinstance(state, HotfireState):
+            hotfire_time = state.hotfire_controller.get_T(self.state_machine.time_keeper.time_since_statechange())
+            if hotfire_time > 0:
+                hotfire_timestr = f"T= +{hotfire_time:.2f} s"                
+            else:
+                hotfire_timestr = f"T= {hotfire_time:.2f} s"
         return self.reply_str("get time",
             {
                 "date_time": f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                "hotfire_time": "Rewriting not complete"
+                "hotfire_time": hotfire_timestr
             }
         )
 
@@ -116,7 +129,9 @@ class CommandProcessor:
         board_name = data["board_name"]
         new_desired_state = data["message"]
         board = self.hardware_handler.get_board(board_name)
-        return board.update_desired_state(new_desired_state)
+        if board is not None:
+            board.update_desired_state(new_desired_state)
+        return 
 
     def get_hardware_json(self, _):
         return json.dumps(config_reader.get_config())
@@ -139,8 +154,8 @@ class CommandProcessor:
     #         return f"Missing key in data: {e}"
         
 
-    def disarm_all(self, _) -> str:
-        return self.hardware_handler.disarm_all()
+    # def disarm_all(self, _) -> str:
+    #     return self.hardware_handler.disarm_all()
 
 
 

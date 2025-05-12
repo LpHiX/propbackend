@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from datetime import datetime
-from typing import Optional
+from typing import Optional, cast
 
 class _BackendLoggerSingleton:
     _instance: Optional['_BackendLoggerSingleton'] = None
@@ -43,8 +43,8 @@ class _BackendLoggerSingleton:
         class MessageFilter(logging.Filter):
             def filter(self, record):
                 message = str(record.getMessage())
-                return not (message.startswith("SERIALMESSAGE") or message.startswith("UDPMESSAGE"))
-                # return True
+                return not (message.startswith("UDPMESSAGE"))# or message.startsWith("SERIALMESSAGE"))
+                return True
 
         console_handler.setFormatter(ColorFormatter())
         console_handler.addFilter(MessageFilter())
@@ -66,26 +66,32 @@ class _BackendLoggerSingleton:
     
     def debug(self, message: str) -> None:
         """Log a debug message"""
+        assert self._logger is not None, "There isn't a config logger"
         self._logger.debug(message)
     
     def info(self, message: str) -> None:
         """Log an info message"""
+        assert self._logger is not None, "There isn't a config logger"
         self._logger.info(message)
     
     def warning(self, message: str) -> None:
         """Log a warning message"""
+        assert self._logger is not None, "There isn't a config logger"
         self._logger.warning(message)
     
     def error(self, message: str, exc_info: bool = False) -> None:
         """Log an error message"""
+        assert self._logger is not None, "There isn't a config logger"
         self._logger.error(message, exc_info=exc_info)
     
     def critical(self, message: str) -> None:
         """Log a critical message"""
+        assert self._logger is not None, "There isn't a config logger"
         self._logger.critical(message)
     
     def exception(self, message: str) -> None:
         """Log an exception with traceback"""
+        assert self._logger is not None, "There isn't a config logger"
         self._logger.exception(message)
 
 # Create the singleton instance with the specific name 'backend_logger'

@@ -6,7 +6,8 @@ if TYPE_CHECKING:
 
 class State(ABC):
     def __init__(self):
-        self._state_machine: 'StateMachine' = None
+        # self._state_machine: 'StateMachine' = None
+        self.name = "BaseName"
 
     @property
     def state_machine(self) -> 'StateMachine':
@@ -29,5 +30,5 @@ class State(ABC):
         pass
 
     @abstractmethod
-    def can_transition_to(self, target_state: type['State']) -> tuple[bool, str]:
+    def can_transition_to(self, target_state: "State") -> tuple[bool, str]:
         pass
