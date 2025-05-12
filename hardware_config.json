@@ -1,11 +1,10 @@
 {
     "boards": {
         "ActuatorBoard": {
-            "active_interval": 0.02,
-            "idle_interval": 0.02,
+            "polling_interval": 0.02,
             "is_actuator": true,
             "serial": {
-                "port": "/dev/ttyAMA2",
+                "port": "/dev/ttyAMA0",
                 "baudrate": 921600
             },
             "solenoids": {

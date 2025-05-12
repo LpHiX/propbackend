@@ -1,0 +1,111 @@
+from .serial_manager import SerialManager
+from propbackend.utils import backend_logger
+from propbackend.utils import config_reader
+from propbackend.hardware.serial_command_scheduler import SerialCommandScheduler
+import asyncio
+import copy
+
+class Board:
+    def __init__(self, name: str, board_config: dict):
+        self.name: str = name
+        self.board_config: dict = board_config
+
+
+        self.serialmanager: SerialManager = None
+        self.scheduler: SerialCommandScheduler = None
+        self.state: dict = {}
+        self.desired_state: dict = {}
+
+        asyncio.create_task(self.initialise_serial())
+
+        for hw_type in config_reader.get_hardware_types():
+            if hw_type in board_config:
+                self.state[hw_type] = {}
+                for item_name, item_data in board_config[hw_type].items():
+                    self.state[hw_type][item_name] = {**config_reader.get_state_defaults()[hw_type].copy(), **item_data}
+        
+        self.is_actuator: bool = board_config.get('is_actuator', False)
+        if self.is_actuator:
+            desired_state = copy.deepcopy(self.state) # WHAT THE FUCK, NESTED DICTIONARIES WERE STILL REFERENCE BASED, LEADING TO UPDATING DESIRED STATES UPDATING ACTUAL STATES
+            if "servos" in board_config:
+                desired_state["servos"] = {}
+                for servo_name, servo_data in board_config["servos"].items():
+                    desired_state["servos"][servo_name] = {"channel": servo_data['channel'], "armed": False}
+                    if 'safe_angle' in servo_data:
+                        desired_state["servos"][servo_name]["armed"] = True
+                        desired_state["servos"][servo_name]["angle"] = servo_data['safe_angle']
+        self.desired_state: dict = desired_state if desired_state is not None else {}
+        
+
+    async def initialise_serial(self) -> bool:
+        serial_config = self.board_config.get('serial', {})
+        if 'port' in serial_config and 'baudrate' in serial_config:
+            try:
+                serial_manager = SerialManager(
+                    board=self,
+                    port=serial_config['port'],
+                    baudrate=serial_config['baudrate'],
+                )
+                await serial_manager.initialize()
+                self.serialmanager = serial_manager
+            except Exception as e:
+                backend_logger.error(f"Failed to initialize serial for board {self.name}: {e}")
+                return False
+        else:
+            backend_logger.error(f"Board {self.name} is missing port or baudrate configuration")
+            return False
+        
+        if self.serialmanager:
+            self.scheduler = SerialCommandScheduler(
+                serial_manager=self.serialmanager,
+                board=self
+            )
+        return True
+    
+
+
+    def update_state(self, new_state: dict) -> None:
+        for hw_type in config_reader.get_hardware_types():
+            if hw_type in new_state and hw_type in self.state:  #Only update state if defined in config
+                for item_name, item_data in new_state[hw_type].items():
+                    if item_name in self.state[hw_type]:
+                        for key, value in item_data.items():
+                            self.state[hw_type][item_name][key] = value
+
+    def update_desired_state(self, new_desired_state: dict) -> None:
+        for hw_type in config_reader.get_hardware_types():
+            if hw_type in new_desired_state and hw_type in self.desired_state:
+                for item_name, item_data in new_desired_state[hw_type].items():
+                    if item_name in self.state[hw_type]:
+                        if "armed" in self.state[hw_type][item_name].keys():
+                            if self.state[hw_type][item_name]["armed"]:
+                                # Only update the desired state if the item is armed
+                                if item_name in self.desired_state[hw_type]:
+                                    for key, value in item_data.items():
+                                        self.desired_state[hw_type][item_name][key] = value
+                                # If not armed, make sure the desired powered must be off
+                            else:
+                                if "powered" in self.desired_state[hw_type][item_name].keys():
+                                    self.desired_state[hw_type][item_name]["powered"] = False
+                        if "armed" in new_desired_state[hw_type][item_name].keys():
+                            self.desired_state[hw_type][item_name]["armed"] = new_desired_state[hw_type][item_name]["armed"]
+    
+    def disarm_all(self) -> None:
+        if self.is_actuator:
+            if "servos" in self.desired_state:
+                for servo, _ in self.desired_state["servos"].items():
+                    self.desired_state["servos"][servo]["armed"] = False
+            
+            if "solenoids" in self.desired_state:
+                for solenoid, _ in self.desired_state["solenoids"].items():
+                    self.desired_state["solenoids"][solenoid]["armed"] = False
+            
+            if "pyros" in self.desired_state:
+                for pyro, _ in self.desired_state["pyros"].items():
+                    self.desired_state["pyros"][pyro]["armed"] = False
+    
+    def shutdown(self) -> None:
+        if self.serialmanager:
+            self.scheduler.stop()
+            self.serialmanager.close()
+            backend_logger.debug(f"BOARD Closed serial connection for board {self.name}")
