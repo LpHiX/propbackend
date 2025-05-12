@@ -9,11 +9,12 @@ from propbackend.utils import backend_logger
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from propbackend.hardware.hardware_handler import HardwareHandler
+    # from propbackend.hardware.hardware_handler import HardwareHandler
+    from propbackend.hardware.board import Board
 
 class SerialManager:
-    def __init__(self, board_name, port, baudrate, hardware_handler: "HardwareHandler"):
-        self.board_name = board_name
+    def __init__(self, board: "Board", port, baudrate):
+        self.board = board
         self.port = port
         self.baudrate = baudrate
         self.running = False
@@ -26,7 +27,6 @@ class SerialManager:
         self.cleanup_queue = []  # Will store (timestamp, id) tuples
         self.cleanup_lock = asyncio.Lock()
 
-        self.hardware_handler = hardware_handler
 
         # This is why all three are required:
         # - Send_recieve queues a message to be read, and waits for a read buffer
@@ -43,7 +43,7 @@ class SerialManager:
                 url=self.port,
                 baudrate=self.baudrate
             )
-            backend_logger.info(f"SERIALMANAGER Serial port {self.port} opened at {self.baudrate} baud for board {self.board_name}")
+            backend_logger.info(f"SERIALMANAGER Serial port {self.port} opened at {self.baudrate} baud for board {self.board.name}")
             
             # Start the background reading thread
             self.running = True
@@ -71,7 +71,7 @@ class SerialManager:
                 if not data:
                     continue
 
-                backend_logger.debug(f"SERIALMANAGER Received: {data}")
+                backend_logger.debug(f"SERIALMESSAGE Received: {data}")
 
                 try:
                     message_json = json.loads(data)
@@ -130,6 +130,7 @@ class SerialManager:
             message_json["send_id"] = send_id
             message = json.dumps(message_json)
 
+            backend_logger.debug(f"SERIALMESSAGE Sending: {message.strip()}")
             self.writer.write(message.encode())
             await self.writer.drain()
 
@@ -142,13 +143,16 @@ class SerialManager:
                     if send_id in self.read_buffer:
                         response = json.dumps(self.read_buffer[send_id])
                         del self.read_buffer[send_id]
-                        self.hardware_handler.update_board_state(self.board_name, response)
+                        response_json = json.loads(response)
+                        self.board.update_state(response_json)
                         break
                 await asyncio.sleep(0.001)
             if time.perf_counter() - start_time > timeout_time:
-                print(f"SERIALMANAGER Timeout waiting for response with send_id {send_id} for board {self.board_name}")
+                print(f"SERIALMANAGER Timeout waiting for response with send_id {send_id} for board {self.board.name}")
+        except json.JSONDecodeError as e:
+            backend_logger.error(f"SERIALMANAGER JSON Decode error: {e}")
         except Exception as e:
-            print(f"SERIALMANAGER Send error: {e}")
+            backend_logger.error(f"SERIALMANAGER Send_recieve error: {e}", exc_info=True)
 
     def is_connected(self):
         """Check if serial connection is active"""

@@ -4,7 +4,7 @@ from propbackend.state_machine.base_state import State
 
 class IdleState(State):
     def setup(self) -> None:
-        pass
+        self.name = "Idle"
 
     def loop(self) -> None:
         pass

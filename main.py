@@ -23,12 +23,13 @@ async def main() -> None:
     state_machine = StateMachine(command_processor)
     udp_server = UDPServer(command_processor)
 
-    command_processor.initialise(hardware_handler, state_machine)
+    command_processor.initialise(state_machine, hardware_handler)
     
     signal_handler = SignalHandler(udp_server)
         
     #signal_handler.add_shutdown_task(lambda: debug_logger.info("Shutting down state machine..."))
     
+
     try:
         while True:
             await state_machine.main_loop()

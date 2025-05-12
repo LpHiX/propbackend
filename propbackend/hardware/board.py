@@ -1,6 +1,7 @@
 from .serial_manager import SerialManager
 from propbackend.utils import backend_logger
 from propbackend.utils import config_reader
+from propbackend.hardware.serial_command_scheduler import SerialCommandScheduler
 import asyncio
 import copy
 
@@ -11,6 +12,7 @@ class Board:
 
 
         self.serialmanager: SerialManager = None
+        self.scheduler: SerialCommandScheduler = None
         self.state: dict = {}
         self.desired_state: dict = {}
 
@@ -40,7 +42,7 @@ class Board:
         if 'port' in serial_config and 'baudrate' in serial_config:
             try:
                 serial_manager = SerialManager(
-                    board_name=self.name,
+                    board=self,
                     port=serial_config['port'],
                     baudrate=serial_config['baudrate'],
                 )
@@ -52,11 +54,19 @@ class Board:
         else:
             backend_logger.error(f"Board {self.name} is missing port or baudrate configuration")
             return False
+        
+        if self.serialmanager:
+            self.scheduler = SerialCommandScheduler(
+                serial_manager=self.serialmanager,
+                board=self
+            )
         return True
+    
+
 
     def update_state(self, new_state: dict) -> None:
         for hw_type in config_reader.get_hardware_types():
-            if hw_type in new_state:
+            if hw_type in new_state and hw_type in self.state:  #Only update state if defined in config
                 for item_name, item_data in new_state[hw_type].items():
                     if item_name in self.state[hw_type]:
                         for key, value in item_data.items():
@@ -93,3 +103,9 @@ class Board:
             if "pyros" in self.desired_state:
                 for pyro, _ in self.desired_state["pyros"].items():
                     self.desired_state["pyros"][pyro]["armed"] = False
+    
+    def shutdown(self) -> None:
+        if self.serialmanager:
+            self.scheduler.stop()
+            self.serialmanager.close()
+            backend_logger.debug(f"BOARD Closed serial connection for board {self.name}")

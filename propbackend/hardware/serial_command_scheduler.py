@@ -4,17 +4,16 @@ from propbackend.utils import backend_logger
 from propbackend.utils import config_reader
 import asyncio
 
-# HARDWARD DEFAULTS DONT EXIST YET
 
 if TYPE_CHECKING:
     from propbackend.hardware.serial_manager import SerialManager
     from propbackend.hardware.board import Board
 
 class SerialCommandScheduler:
-    def __init__(self, serial_manager: SerialManager, board: Board):
+    def __init__(self, serial_manager: "SerialManager", board: "Board"):
         self.serial_manager = serial_manager
         self.board = board
-        self.update_interval = board.config["active_interval"]
+        self.update_interval = board.board_config["polling_interval"]
         self.running = True
         self.timekeeper = TimeKeeper(name=f'{self.board.name}_SerialCommandScheduler', cycle_time=self.update_interval)
 
@@ -38,4 +37,9 @@ class SerialCommandScheduler:
     async def start_sending(self):
         while self.running:
             self.timekeeper.cycle_start()
-            await self.serial_manager.send_receive()
+            asyncio.create_task(self.serial_manager.send_receive(self.command))
+            await self.timekeeper.cycle_end()
+    
+    def stop(self):
+        self.running = False
+        backend_logger.debug(f"SERIALCOMMANDSCHEDULER Serial command scheduler for board {self.board.name} stopped")

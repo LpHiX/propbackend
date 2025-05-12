@@ -40,7 +40,14 @@ class _BackendLoggerSingleton:
                 formatter = logging.Formatter(log_fmt)
                 return formatter.format(record)
 
+        class MessageFilter(logging.Filter):
+            def filter(self, record):
+                message = str(record.getMessage())
+                return not (message.startswith("SERIALMESSAGE") or message.startswith("UDPMESSAGE"))
+                # return True
+
         console_handler.setFormatter(ColorFormatter())
+        console_handler.addFilter(MessageFilter())
 
         self._logger.addHandler(console_handler)
 
@@ -69,9 +76,9 @@ class _BackendLoggerSingleton:
         """Log a warning message"""
         self._logger.warning(message)
     
-    def error(self, message: str) -> None:
+    def error(self, message: str, exc_info: bool = False) -> None:
         """Log an error message"""
-        self._logger.error(message)
+        self._logger.error(message, exc_info=exc_info)
     
     def critical(self, message: str) -> None:
         """Log a critical message"""

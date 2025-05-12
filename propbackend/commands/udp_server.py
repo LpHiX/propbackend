@@ -1,6 +1,7 @@
 from propbackend.commands.command_processor import CommandProcessor
 from propbackend.utils import backend_logger
 import asyncio
+import serial_asyncio
 
 class UDPServer:
     def __init__(self, command_processor: CommandProcessor, host='0.0.0.0', port=8888):
@@ -26,18 +27,18 @@ class UDPServer:
                 
             def datagram_received(self, data, addr):
                 message = data.decode('utf-8').strip()
-                backend_logger.debug(f"UDP Received: '{message}' from {addr}")
+                backend_logger.debug(f"UDPMESSAGE Received: '{message}' from {addr}")
                 
                 # Process the message
                 asyncio.create_task(self._process_message(message, addr))
 
             async def _process_message(self, message, addr):
                 try:
-                    response = await self.server.command_processor.process_message(message) 
+                    response = await self.server.command_processor.process_message(message)
                     self.server.transport.sendto(response.encode('utf-8'), addr)
                 except Exception as e:
-                    backend_logger.error(f"Error processing message: {e}")
-                    error_response = f"Error processing message: {e}"
+                    backend_logger.error(f"UDPSERVER Error processing message: {e}")
+                    error_response = f"UDPSERVER Error processing message: {e}"
                     self.server.transport.sendto(error_response.encode('utf-8'), addr)
         
         loop = asyncio.get_running_loop()

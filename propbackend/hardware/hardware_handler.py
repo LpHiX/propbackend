@@ -23,31 +23,29 @@ class HardwareHandler:
 
     
     async def load_hardware(self):
-        for board_name, board_config in self.config['boards'].items():
+        for board_name, board_config in config_reader.get_board_config().items():
             self.boards.append(Board(board_name, board_config))
     
     def unload_hardware(self):
         # Close all serial connections
         for board in self.boards:
-            if board.serialmanager:
-                board.serialmanager.close()
-                print(f"Closed serial connection for board: {board.name}")
+            board.shutdown()
         self.boards = []
         
-    async def send_receive(self, board_name, message):
-        """Send a message to a specific board and receive the response"""
-        board = self.get_board(board_name)
-        if not board:
-            print(f"Board {board_name} not found")
-            return f"Board {board_name} not found"
-        if not board.serialmanager:
-            print(f"Board {board_name} does not have a serial manager")
-            return f"Board {board_name} does not have a serial manager"
-        manager = board.serialmanager
-        response = await manager.send_receive(message)
-        try:
-            response_dict = json.loads(response)
-            self.update_board_state(board_name, response_dict)
-            return response
-        except json.JSONDecodeError:
-            return response
+    # async def send_receive(self, board_name, message):
+    #     """Send a message to a specific board and receive the response"""
+    #     board = self.get_board(board_name)
+    #     if not board:
+    #         print(f"Board {board_name} not found")
+    #         return f"Board {board_name} not found"
+    #     if not board.serialmanager:
+    #         print(f"Board {board_name} does not have a serial manager")
+    #         return f"Board {board_name} does not have a serial manager"
+    #     manager = board.serialmanager
+    #     response = await manager.send_receive(message)
+    #     try:
+    #         response_dict = json.loads(response)
+    #         self.update_board_state(board_name, response_dict)
+    #         return response
+    #     except json.JSONDecodeError:
+    #         return response

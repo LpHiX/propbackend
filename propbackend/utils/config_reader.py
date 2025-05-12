@@ -16,23 +16,32 @@ class _ConfigReaderSingleton:
     
     def _initialize_config(self) -> None:
         with open('hardware_config.json', 'r') as file:
-            _config_json = json.load(file)
+            self._config_json = json.load(file)
         with open('hardware_config.json', 'w') as file:
-            json.dump(_config_json, file, indent=4)
+            json.dump(self._config_json, file, indent=4)
 
-        board_config = _config_json.get("boards", {})
+        board_config = self._config_json.get("boards", {})
         if not board_config:
             backend_logger.error("Board configuration is empty. Please check the hardware_config.json file.")
             return
         else:
             self._board_config = board_config
 
-        state_defaults = _config_json.get("state_defaults", {})
+        state_defaults = self._config_json.get("state_defaults", {})
         if not state_defaults:
             backend_logger.error("State defaults configuration is empty. Please check the hardware_config.json file.")
             return
         else:
             self._state_defaults = state_defaults
+
+    def reload_config(self) -> None:
+        self._initialize_config()
+
+    def get_config(self) -> dict:
+        if not self._config_json:
+            backend_logger.error("Configuration is empty. Please check the hardware_config.json file.")
+            return {}
+        return self._config_json
 
     def get_board_config(self) -> dict:
         if not self._board_config:

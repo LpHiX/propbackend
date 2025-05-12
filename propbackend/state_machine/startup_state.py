@@ -5,7 +5,7 @@ import time
 
 class StartupState(State):
     def setup(self) -> None:
-        pass
+        self.name = "Startup"
 
     def loop(self) -> None:
         if self.state_machine.time_keeper.time_since_statechange() > 2:

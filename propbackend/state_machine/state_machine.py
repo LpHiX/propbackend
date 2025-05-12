@@ -36,12 +36,13 @@ class StateMachine:
 
     
 
-    def transition_to(self, state: State) -> None:
+    def transition_to(self, state: State) -> str:
         if self._state is not None:
             transition_valid, reason = self._state.can_transition_to(state)
             if not transition_valid:
-                backend_logger.debug(f"Attempted transition from {type(self._state).__name__} to {type(state).__name__} failed, Reason: {reason}")
-                return
+                reason_string = f"Attempted transition from {type(self._state).__name__} to {type(state).__name__} failed, Reason: {reason}"
+                backend_logger.warning(reason_string)
+                return reason_string
             self._state.teardown()
         backend_logger.info(f"Transitioning from {type(self._state).__name__} to {type(state).__name__}")
         self._state = state
@@ -49,8 +50,12 @@ class StateMachine:
         self._state.setup()
         self.time_keeper.statechange()
         backend_logger.debug(f"State {type(self._state).__name__} setup complete")
+        return f"Transitioned to {type(self._state).__name__}"
 
     async def main_loop(self) -> None:
         self.time_keeper.cycle_start()
         self._state.loop()
         await self.time_keeper.cycle_end()
+
+    def get_state(self) -> State:
+        return self._state
