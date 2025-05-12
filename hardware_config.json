@@ -22,8 +22,7 @@
             }
         },
         "Sensorboard0": {
-            "active_interval": 0.015,
-            "idle_interval": 0.015,
+            "polling_interval": 0.015,
             "serial": {
                 "port": "/dev/ttyAMA0",
                 "baudrate": 921600

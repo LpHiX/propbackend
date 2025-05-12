@@ -34,7 +34,6 @@ class Board:
                     if 'safe_angle' in servo_data:
                         desired_state["servos"][servo_name]["armed"] = True
                         desired_state["servos"][servo_name]["angle"] = servo_data['safe_angle']
-        self.desired_state: dict = desired_state if desired_state is not None else {}
         
 
     async def initialise_serial(self) -> bool:
