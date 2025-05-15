@@ -1,4 +1,6 @@
 # proppibackend
+Welcome to propbackend!
+
 
 Ethernet Setup:
 1. Check ICS connection. (Without internet the ethernet connection shuts down after around 2 minutes and you have to replug)

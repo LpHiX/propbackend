@@ -2,19 +2,19 @@ import json
 
 class HotfireController():
     def __init__(self):
-        with open('hotfiresequence.json', 'r') as file:
+        with open('configs/hotfiresequence.json', 'r') as file:
             sequencejson = json.load(file)
 
         self.set_hotfire_sequence(sequencejson)
-        
-        with open('hotfiresequence.json', 'w') as file:
-                json.dump(self.sequencejson, file, indent=4)
+
+        with open('configs/hotfiresequence.json', 'w') as file:
+            json.dump(self.sequencejson, file, indent=4)
 
     def set_hotfire_sequence(self, sequencejson):
         self.sequencejson = sequencejson
-        with open('hotfiresequence.json', 'w') as file:
+        with open('configs/hotfiresequence.json', 'w') as file:
             json.dump(self.sequencejson, file, indent=4)
-        
+
         self.time_before_ignition = self.sequencejson["time_before_ignition"]
         self.hotfire_safing_time = self.sequencejson["hotfire_safing_time"]
         self.start_end_desiredstate = self.sequencejson["start_end_desiredstate"]

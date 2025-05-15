@@ -15,9 +15,9 @@ class _ConfigReaderSingleton:
         return cls._instance
     
     def _initialize_config(self) -> None:
-        with open('hardware_config.json', 'r') as file:
+        with open('configs/hardware_config.json', 'r') as file:
             self._config_json = json.load(file)
-        with open('hardware_config.json', 'w') as file:
+        with open('configs/hardware_config.json', 'w') as file:
             json.dump(self._config_json, file, indent=4)
 
         board_config = self._config_json.get("boards", {})
