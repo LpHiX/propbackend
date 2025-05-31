@@ -4,15 +4,21 @@
             "polling_interval": 0.02,
             "is_actuator": true,
             "serial": {
-                "port": "/dev/ttyS0",
+                "port": "/dev/ttyAMA0",
                 "baudrate": 921600
             },
             "solenoids": {
                 "Fuel": {
-                    "channel": 1
+                    "channel": 0
                 },
                 "Ox": {
+                    "channel": 1
+                },
+                "OxFill": {
                     "channel": 2
+                },
+                "FuelPress": {
+                    "channel": 3
                 }
             },
             "pyros": {
@@ -24,7 +30,7 @@
         "Sensorboard0": {
             "polling_interval": 0.02,
             "serial": {
-                "port": "/dev/ttyAMA0",
+                "port": "/dev/ttyAMA1",
                 "baudrate": 921600
             },
             "pts": {

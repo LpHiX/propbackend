@@ -40,8 +40,7 @@ async def main() -> None:
         while True:
             await state_machine.main_loop()
             if state_machine.time_keeper.get_cycle() % 10 == 0:
-                backend_logger.info(f"Current state: {type(state_machine._state).__name__}")
-            main_loop_logger.write_data(hardware_handler.boards)
+                main_loop_logger.write_data(hardware_handler.boards)
     except asyncio.CancelledError:
         # This will be reached when tasks are cancelled during shutdown
         backend_logger.info("Main loop cancelled, shutting down...")
