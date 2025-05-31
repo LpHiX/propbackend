@@ -34,22 +34,22 @@
                 "baudrate": 921600
             },
             "pts": {
-                "Chamber": {
+                "Ox": {
                     "channel": 0,
-                    "gain": 0.028169,
-                    "offset": 841,
+                    "gain": 0.0286327845383,
+                    "offset": 791.075,
                     "adc": true
                 },
-                "FuelCALIBRATED": {
+                "Chamber": {
                     "channel": 1,
-                    "gain": 0.00842697,
-                    "offset": 742.33333,
+                    "gain": 0.00895994,
+                    "offset": 710.39216,
                     "adc": true
                 },
-                "OxCALIBRATED": {
-                    "channel": 3,
-                    "gain": 0.0287081,
-                    "offset": 858.16667,
+                "Fuel": {
+                    "channel": 2,
+                    "gain": 0.0286917,
+                    "offset": 791.146666667,
                     "adc": true
                 }
             }
