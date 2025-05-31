@@ -14,10 +14,10 @@
                 "Ox": {
                     "channel": 1
                 },
-                "OxFill": {
+                "FuelPress": {
                     "channel": 2
                 },
-                "FuelPress": {
+                "FuelVent": {
                     "channel": 3
                 }
             },

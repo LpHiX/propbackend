@@ -26,12 +26,12 @@
             "ActuatorBoard": {
                 "solenoids": {
                     "Fuel": {
-                        "armed": false,
-                        "powered": false
-                    },
-                    "Ox": {
                         "armed": true,
                         "powered": true
+                    },
+                    "Ox": {
+                        "armed": false,
+                        "powered": false
                     }
                 },
                 "pyros": {
@@ -76,13 +76,13 @@
                 },
                 "pyros": {
                     "Igniter": {
-                        "armed": false,
-                        "powered": false
+                        "armed": true,
+                        "powered": true
                     }
                 }
             }
         },
-        "5": {
+        "10": {
             "ActuatorBoard": {
                 "solenoids": {
                     "Fuel": {
