@@ -5,23 +5,35 @@ from datetime import datetime
 import csv
 import time
 
+from propbackend.utils import config_reader
+
 class BoardStateLogger:
     def __init__(self, name, hardware_handler: HardwareHandler, log_dir="/mnt/proppi_data/logs"):
+        self.name = name
         self.log_dir = log_dir
+        self.hardware_handler = hardware_handler
+
         os.makedirs(log_dir, exist_ok=True)
 
-        self.current_csv = None
-        self.csv_writer = None
-        self.name = name
-    
         self.file_name = f"test_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{self.name}.csv"
         self.csv_path = f"{self.log_dir}/{self.file_name}"
+
         self.current_csv = open(self.csv_path, 'w', newline='')
         self.csv_writer = csv.writer(self.current_csv)
-        self.current_csv.write(f"#Test started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    
+        comment_test = f"#Test started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "
+        for board in self.hardware_handler.boards:
+            for hw_type in config_reader.get_hardware_types():
+                if hw_type in board.board_config:
+                    for item_name, item_data in board.board_config[hw_type].items():
+                        if item_data.get("adc"):
+                            comment_test += f"ADC_{hw_type}_{item_name}_gain:{item_data['gain']}_offset:{item_data['offset']} "
+
+        comment_test += "\n"
+        self.current_csv.write(comment_test)
         self.start_time = time.perf_counter()
 
-        self.state_defaults = hardware_handler.state_defaults
+        self.state_defaults = config_reader.get_state_defaults()
     
     def write_headers(self, boards: list[Board]):
         headers = ["timestamp"]
@@ -66,8 +78,9 @@ class BoardStateLogger:
                             else:
                                 data.append(None)
 
-        self.csv_writer.writerow(data)
-        self.current_csv.flush()
+        if self.current_csv:
+            self.csv_writer.writerow(data)
+            self.current_csv.flush()
 
     def close(self):
         if self.current_csv:

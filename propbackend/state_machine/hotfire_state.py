@@ -10,8 +10,8 @@ class HotfireState(State):
     def setup(self) -> None:
         self.hotfire_controller = HotfireController()
 
-        # self.hotfire_logger = BoardStateLogger("HotfireLog", )
-        # self.hotfire_logger.setup()
+        self.hotfire_logger = BoardStateLogger("HotfireLog", self.state_machine.hardware_handler)
+        self.hotfire_logger.write_headers(self.state_machine.hardware_handler.boards)
 
     def loop(self) -> None:
         time_keeper = self.state_machine.time_keeper
@@ -33,11 +33,11 @@ class HotfireState(State):
                 #TODO SHOULD THIS TRIGGER AN ABORT?
                 # ----------------------------------
 
-        # self.hotfire_logger.write_data(self.state_machine.hardware_handler.boards)
+        self.hotfire_logger.write_data(self.state_machine.hardware_handler.boards)
         
         if self.hotfire_controller.is_hotfire_complete(time_statechange):
             backend_logger.info(f"Hotfire complete at T{T:.0f}s")
-            # self.hotfire_logger.close()
+            self.hotfire_logger.close()
             
 
             from propbackend.state_machine.idle_state import IdleState

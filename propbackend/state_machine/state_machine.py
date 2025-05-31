@@ -31,7 +31,7 @@ class StateMachine:
         self.hardware_handler = hardware_handler
 
         self._state: State | None = None
-        self.time_keeper = TimeKeeper(name="StateMachineTimeKeeper", cycle_time=0.1, debug_time=60)
+        self.time_keeper = TimeKeeper(name="StateMachineTimeKeeper", cycle_time=0.01, debug_time=60)
         self.transition_to(StartupState())
 
     

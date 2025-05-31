@@ -9,6 +9,8 @@ from propbackend.commands.udp_server import UDPServer
 from propbackend.commands.command_processor import CommandProcessor
 from propbackend.hardware.hardware_handler import HardwareHandler
 
+from propbackend.utils.boardstate_logger import BoardStateLogger
+
 def try_uvloop() -> None:
     try:
         import uvloop
@@ -30,9 +32,14 @@ async def main() -> None:
         
     #signal_handler.add_shutdown_task(lambda: debug_logger.info("Shutting down state machine..."))
 
+
+    main_loop_logger = BoardStateLogger("mainloop", hardware_handler)
+    main_loop_logger.write_headers(hardware_handler.boards)
+
     try:
         while True:
             await state_machine.main_loop()
+            main_loop_logger.write_data(hardware_handler.boards)
     except asyncio.CancelledError:
         # This will be reached when tasks are cancelled during shutdown
         backend_logger.info("Main loop cancelled, shutting down...")
