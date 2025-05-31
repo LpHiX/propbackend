@@ -5,19 +5,16 @@
         "ActuatorBoard": {
             "solenoids": {
                 "Fuel": {
-                    "channel": 1,
                     "armed": false,
                     "powered": false
                 },
                 "Ox": {
-                    "channel": 2,
                     "armed": false,
                     "powered": false
                 }
             },
             "pyros": {
                 "Igniter": {
-                    "channel": 0,
                     "armed": false,
                     "powered": false
                 }
@@ -29,19 +26,16 @@
             "ActuatorBoard": {
                 "solenoids": {
                     "Fuel": {
-                        "channel": 1,
                         "armed": false,
                         "powered": false
                     },
                     "Ox": {
-                        "channel": 2,
                         "armed": true,
                         "powered": true
                     }
                 },
                 "pyros": {
                     "Igniter": {
-                        "channel": 0,
                         "armed": true,
                         "powered": true
                     }
@@ -52,19 +46,16 @@
             "ActuatorBoard": {
                 "solenoids": {
                     "Fuel": {
-                        "channel": 1,
                         "armed": true,
                         "powered": true
                     },
                     "Ox": {
-                        "channel": 2,
                         "armed": true,
                         "powered": true
                     }
                 },
                 "pyros": {
                     "Igniter": {
-                        "channel": 0,
                         "armed": true,
                         "powered": true
                     }
@@ -75,19 +66,16 @@
             "ActuatorBoard": {
                 "solenoids": {
                     "Fuel": {
-                        "channel": 1,
                         "armed": true,
                         "powered": true
                     },
                     "Ox": {
-                        "channel": 2,
                         "armed": true,
                         "powered": true
                     }
                 },
                 "pyros": {
                     "Igniter": {
-                        "channel": 0,
                         "armed": false,
                         "powered": false
                     }
@@ -98,19 +86,16 @@
             "ActuatorBoard": {
                 "solenoids": {
                     "Fuel": {
-                        "channel": 1,
                         "armed": false,
                         "powered": false
                     },
                     "Ox": {
-                        "channel": 2,
                         "armed": false,
                         "powered": false
                     }
                 },
                 "pyros": {
                     "Igniter": {
-                        "channel": 0,
                         "armed": false,
                         "powered": false
                     }

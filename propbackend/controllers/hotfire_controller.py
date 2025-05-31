@@ -52,7 +52,7 @@ class HotfireController():
             desired_state = self.start_end_desiredstate
         else:
             time_index = 0
-            while T > self.sorted_times[time_index]:
+            while T > self.sorted_times[time_index+1]: #HOLY SHIT HOW DID I FORGET THIS +1 A SECOND TIME
                 time_index += 1
             desired_state = self.sequencejson["sequence"][self.sorted_timestr[time_index]]
         

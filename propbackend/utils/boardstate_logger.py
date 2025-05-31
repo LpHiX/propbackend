@@ -44,13 +44,13 @@ class BoardStateLogger:
                     continue
                 for item_name, _ in items.items():
                     for state_name in self.state_defaults[hw_type].keys():
-                        headers.append(f"{board.name}_{hw_type}_{item_name}_{state_name}")
+                        headers.append(f"{hw_type}_{item_name}_{state_name}")
             for hw_type, items in board.desired_state.items():
                 if not isinstance(items, dict):
                     continue
                 for item_name, _ in items.items():
                     for state_name in self.state_defaults[hw_type].keys():
-                        headers.append(f"{board.name}_{hw_type}_{item_name}_{state_name}_desiredstate")
+                        headers.append(f"{hw_type}_{item_name}_{state_name}_desiredstate")
         
         self.csv_writer.writerow(headers)
 
