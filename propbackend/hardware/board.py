@@ -1,7 +1,9 @@
-from .serial_manager import SerialManager
 from propbackend.utils import backend_logger
 from propbackend.utils import config_reader
+from propbackend.hardware.serial_manager import SerialManager
 from propbackend.hardware.serial_command_scheduler import SerialCommandScheduler
+from propbackend.hardware.udp_manager import UDPManager
+from propbackend.hardware.udp_command_scheduler import UDPCommandScheduler
 import asyncio
 import copy
 import json
@@ -13,13 +15,19 @@ class Board:
         self.name: str = name
         self.board_config: dict = board_config
 
-
-        self.serialmanager: SerialManager = cast(SerialManager, None)
-        self.scheduler: SerialCommandScheduler = cast(SerialCommandScheduler, None)
         self.state: dict = {}
         self.desired_state: dict = {}
 
-        asyncio.create_task(self.initialise_serial())
+
+        if 'serial' in board_config:
+            self.serialmanager: SerialManager = cast(SerialManager, None)
+            self.serialscheduler: SerialCommandScheduler = cast(SerialCommandScheduler, None)
+            asyncio.create_task(self.initialise_serial())
+
+        if 'udp' in board_config:
+            self.udpmanager: UDPManager = cast(UDPManager, None)
+            self.udpscheduler: UDPCommandScheduler = cast(UDPCommandScheduler, None)
+            asyncio.create_task(self.initialise_udp())
 
         for hw_type in config_reader.get_hardware_types():
             if hw_type in board_config:
@@ -58,12 +66,36 @@ class Board:
             return False
         
         if self.serialmanager:
-            self.scheduler = SerialCommandScheduler(
+            self.serialscheduler = SerialCommandScheduler(
                 serial_manager=self.serialmanager,
                 board=self
             )
         return True
     
+    async def initialise_udp(self) -> bool:
+        udp_config = self.board_config.get('udp', {})
+        if 'ip' in udp_config and 'port' in udp_config:
+            try:
+                udp_manager = UDPManager(
+                    board=self,
+                    ip=udp_config['ip'],
+                    port=udp_config['port'],
+                )
+                await udp_manager.initialize()
+                self.udpmanager = udp_manager
+            except Exception as e:
+                backend_logger.error(f"Failed to initialize UDP for board {self.name}: {e}")
+                return False
+        else:
+            backend_logger.error(f"Board {self.name} is missing IP or port configuration")
+            return False
+        
+        if self.udpmanager:
+            self.udpscheduler = UDPCommandScheduler(
+                udp_manager=self.udpmanager,
+                board=self
+            )
+        return True
 
 
     def update_state(self, new_state: dict) -> None:
@@ -108,7 +140,7 @@ class Board:
                     self.desired_state["pyros"][pyro]["armed"] = False
     
     def shutdown(self) -> None:
-        if self.serialmanager:
-            self.scheduler.stop()
+        if hasattr(self, 'serialmanager') and self.serialmanager:
+            self.serialscheduler.stop()
             self.serialmanager.close()
             backend_logger.debug(f"BOARD Closed serial connection for board {self.name}")

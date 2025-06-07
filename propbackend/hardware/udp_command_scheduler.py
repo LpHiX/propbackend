@@ -7,16 +7,16 @@ import json
 
 
 if TYPE_CHECKING:
-    from propbackend.hardware.serial_manager import SerialManager
+    from propbackend.hardware.udp_manager import UDPManager
     from propbackend.hardware.board import Board
 
-class SerialCommandScheduler:
-    def __init__(self, serial_manager: "SerialManager", board: "Board"):
-        self.serial_manager = serial_manager
+class UDPCommandScheduler:
+    def __init__(self, udp_manager: "UDPManager", board: "Board"):
+        self.udp_manager = udp_manager
         self.board = board
         self.update_interval = board.board_config["polling_interval"]
         self.running = True
-        self.timekeeper = TimeKeeper(name=f'{self.board.name}_SerialCommandScheduler', cycle_time=self.update_interval)
+        self.timekeeper = TimeKeeper(name=f'{self.board.name}_UDPCommandScheduler', cycle_time=self.update_interval)
 
         self.command = self.create_command()
         asyncio.create_task(self.start_sending())
@@ -38,9 +38,9 @@ class SerialCommandScheduler:
     async def start_sending(self):
         while self.running:
             self.timekeeper.cycle_start()
-            asyncio.create_task(self.serial_manager.send_receive(self.command))
+            asyncio.create_task(self.udp_manager.send_receive(self.command))
             await self.timekeeper.cycle_end()
     
     def stop(self):
         self.running = False
-        backend_logger.debug(f"SERIALCOMMANDSCHEDULER Serial command scheduler for board {self.board.name} stopped")
+        backend_logger.debug(f"UDPCOMMANDSCHEDULER UDP command scheduler for board {self.board.name} stopped")

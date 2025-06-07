@@ -53,6 +53,17 @@
                     "adc": true
                 }
             }
+        },
+        "TVCBoard0": {
+            "polling_interval": 0.02,
+            "is_actuator": true,
+            "udp": {
+                "ip": "127.0.0.1",
+                "port": 65432
+            },
+            "tvcs": {
+                "TVC1": {}
+            }
         }
     },
     "state_defaults": {
@@ -67,6 +78,12 @@
         "pyros": {
             "armed": null,
             "powered": null
+        },
+        "tvcs": {
+            "armed": null,
+            "state": null,
+            "angle0": null,
+            "angle1": null
         },
         "pts": {
             "mv": null
