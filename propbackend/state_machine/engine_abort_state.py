@@ -1,13 +1,25 @@
 from .base_state import State
-
+from propbackend.controllers.hotfire_controller import HotfireController
+from propbackend.utils import backend_logger
 
 
 class EngineAbortState(State):
     def setup(self) -> None:
-        pass
+        self.name = "Engine Abort"
+        self.hotfire_controller = HotfireController()
 
     def loop(self) -> None:
-        pass
+        board_desired_state = self.hotfire_controller.get_abort_desiredstate()
+        for board_name, desired_state in board_desired_state.items():
+            board = self.state_machine.hardware_handler.get_board(board_name)   
+            if board:
+                board.update_desired_state(desired_state)
+            else:
+                backend_logger.warning(f"Board {board_name} not found in hotfire state")
+                # -----------------------------------
+                #TODO SHOULD THIS TRIGGER AN ABORT?
+                # ----------------------------------
+
 
     def teardown(self) -> None:
         pass

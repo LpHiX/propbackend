@@ -1,22 +1,12 @@
 {
-    "time_before_ignition": 2,
-    "hotfire_safing_time": 2,
+    "time_before_ignition": 4,
+    "hotfire_safing_time": 1,
     "start_end_desiredstate": {
         "ActuatorBoard": {
-            "solenoids": {
-                "Fuel": {
-                    "armed": false,
-                    "powered": false
-                },
-                "Ox": {
-                    "armed": false,
-                    "powered": false
-                }
-            },
-            "pyros": {
-                "Igniter": {
-                    "armed": false,
-                    "powered": false
+            "servos": {
+                "Motor": {
+                    "armed": true,
+                    "angle": 0
                 }
             }
         }
@@ -24,80 +14,31 @@
     "sequence": {
         "0": {
             "ActuatorBoard": {
-                "solenoids": {
-                    "Fuel": {
+                "servos": {
+                    "Motor": {
                         "armed": true,
-                        "powered": true
-                    },
-                    "Ox": {
-                        "armed": false,
-                        "powered": false
-                    }
-                },
-                "pyros": {
-                    "Igniter": {
-                        "armed": true,
-                        "powered": true
+                        "angle": 40,
+                        "ramp_to_next": true
                     }
                 }
             }
         },
-        "0.2": {
+        "4": {
             "ActuatorBoard": {
-                "solenoids": {
-                    "Fuel": {
+                "servos": {
+                    "Motor": {
                         "armed": true,
-                        "powered": true
-                    },
-                    "Ox": {
-                        "armed": true,
-                        "powered": true
-                    }
-                },
-                "pyros": {
-                    "Igniter": {
-                        "armed": true,
-                        "powered": true
+                        "angle": 200
                     }
                 }
             }
         },
-        "0.5": {
+        "40": {
             "ActuatorBoard": {
-                "solenoids": {
-                    "Fuel": {
+                "servos": {
+                    "Motor": {
                         "armed": true,
-                        "powered": true
-                    },
-                    "Ox": {
-                        "armed": true,
-                        "powered": true
-                    }
-                },
-                "pyros": {
-                    "Igniter": {
-                        "armed": true,
-                        "powered": true
-                    }
-                }
-            }
-        },
-        "10": {
-            "ActuatorBoard": {
-                "solenoids": {
-                    "Fuel": {
-                        "armed": false,
-                        "powered": false
-                    },
-                    "Ox": {
-                        "armed": false,
-                        "powered": false
-                    }
-                },
-                "pyros": {
-                    "Igniter": {
-                        "armed": false,
-                        "powered": false
+                        "angle": 200
                     }
                 }
             }

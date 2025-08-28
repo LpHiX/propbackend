@@ -1,4 +1,6 @@
 import json    
+from propbackend.utils import backend_logger
+import copy
 
 class HotfireController():
     def __init__(self):
@@ -49,14 +51,36 @@ class HotfireController():
     def get_hotfire_desiredstate(self, time_since_statechange):
         T = self.get_T(time_since_statechange)
         if T < self.sorted_times[0] or T > self.sorted_times[-1]:
-            desired_state = self.start_end_desiredstate
+            new_desired_state = self.start_end_desiredstate
         else:
             time_index = 0
             while T > self.sorted_times[time_index+1]: #HOLY SHIT HOW DID I FORGET THIS +1 A SECOND TIME
                 time_index += 1
             desired_state = self.sequencejson["sequence"][self.sorted_timestr[time_index]]
-        
-        return desired_state #THIS A DICT OF BOARDS, WITH THEIR DESIRED STATES INSIDE
-    
+
+
+            #Ramping logic ----
+            new_desired_state = copy.deepcopy(desired_state)
+            for board_name, board_data in desired_state.items():
+                for hw_type, hw_data in board_data.items():
+                    if hw_type == "servos":
+                        for servo_name, servo_data in hw_data.items():
+                            if "ramp_to_next" in servo_data and servo_data["ramp_to_next"]:
+                                try:
+                                    current_angle = desired_state[board_name][hw_type][servo_name]["angle"]
+                                    next_desired_state = self.sequencejson["sequence"][self.sorted_timestr[time_index+1]]
+                                    next_desired_angle = next_desired_state[board_name][hw_type][servo_name]["angle"]
+                                    last_time = self.sorted_times[time_index]
+                                    next_time = self.sorted_times[time_index+1]
+                                    weighted_angle = (current_angle * (next_time - T) + next_desired_angle * (T - last_time)) / (next_time - last_time)
+                                    # backend_logger.info(f"Ramping servo {servo_name} on board {board_name} from {current_angle} to {next_desired_angle}. Current time: {T}, last_time: {last_time}, next_time: {next_time}, weighted_angle: {weighted_angle}")
+                                    new_desired_state[board_name][hw_type][servo_name]["angle"] = weighted_angle
+                                    new_desired_state[board_name][hw_type][servo_name].pop("ramp_to_next") #Remove this key so it doesn't interfere with actuation logic
+                                except IndexError:
+                                    backend_logger.critical("IndexError: Hotfire sequence is not long enough to apply ramping logic.")
+
+        # backend_logger.info(f"Yeah{json.dumps(new_desired_state)}")
+        return new_desired_state #THIS A DICT OF BOARDS, WITH THEIR DESIRED STATES INSIDE
+
     def get_abort_desiredstate(self):
         return self.start_end_desiredstate

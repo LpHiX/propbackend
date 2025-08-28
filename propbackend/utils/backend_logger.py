@@ -43,8 +43,11 @@ class _BackendLoggerSingleton:
         class MessageFilter(logging.Filter):
             def filter(self, record):
                 message = str(record.getMessage())
-                return not (message.startswith("UDPMESSAGE") or message.startswith("SERIALMESSAGE"))
-                # return True
+                # if message.startswith("UDPMESSAGE"): return False
+                if message.startswith('UDPMESSAGE Received: {"command": "get') : return False
+                if message.startswith("SERIALMESSAGE Sending:"): return False
+                if message.startswith("SERIALMESSAGE Received:"): return False
+                return True
 
         console_handler.setFormatter(ColorFormatter())
         console_handler.addFilter(MessageFilter())

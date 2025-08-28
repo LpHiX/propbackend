@@ -8,6 +8,7 @@ from propbackend.controllers.hotfire_controller import HotfireController
 
 class HotfireState(State):
     def setup(self) -> None:
+        self.name = "Hotfire"
         self.hotfire_controller = HotfireController()
 
         self.hotfire_logger = BoardStateLogger("HotfireLog", self.state_machine.hardware_handler)
@@ -19,10 +20,11 @@ class HotfireState(State):
 
         T = self.hotfire_controller.get_T(time_statechange)
         
-        if time_keeper.get_cycle() % 10 == 0:
+        if time_keeper.get_cycle() % 100 == 0:
             backend_logger.info(f"T{T:.0f}s")
 
         board_desired_state = self.hotfire_controller.get_hotfire_desiredstate(time_statechange)
+
         for board_name, desired_state in board_desired_state.items():
             board = self.state_machine.hardware_handler.get_board(board_name)   
             if board:

@@ -124,6 +124,10 @@ class Board:
                                     self.desired_state[hw_type][item_name]["powered"] = False
                         if "armed" in new_desired_state[hw_type][item_name].keys():
                             self.desired_state[hw_type][item_name]["armed"] = new_desired_state[hw_type][item_name]["armed"]
+                            if hw_type == "servos":
+                                if new_desired_state[hw_type][item_name]["armed"] == False:
+                                    if "disarm_angle" in self.board_config["servos"][item_name].keys():
+                                        self.desired_state["servos"][item_name]["angle"] = 0
     
     def disarm_all(self) -> None:
         if self.is_actuator:

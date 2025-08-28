@@ -29,7 +29,7 @@ class UDPServer:
                 
             def datagram_received(self, data, addr):
                 message = data.decode('utf-8').strip()
-                backend_logger.debug(f"UDPMESSAGE Received: '{message}' from {addr}")
+                backend_logger.info(f"UDPMESSAGE Received: {message} from {addr}")
                 
                 # Process the message
                 asyncio.create_task(self._process_message(message, addr))

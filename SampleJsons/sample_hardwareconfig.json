@@ -1,28 +1,27 @@
 {
     "boards": {
-        "ActuatorBoard": {
-            "is_actuator": true,
-            "polling_interval": 0.1,
+        "Sensorboa77rd0": {
+            "polling_interval": 0.02,
             "serial": {
-                "port": "/dev/ttyAMA1",
+                "port": "/dev/ttyAMA4",
                 "baudrate": 921600
             },
-            "servos": {
-                "Motor": {
-                    "channel": 15,
-                    "disarm_angle": 0
-                }
-            }
-        },
-        "SensorBoard": {
-            "polling_interval": 0.03,
-            "serial": {
-                "port": "/dev/ttyAMA0",
-                "baudrate": 921600
-            },
-            "tachos": {
-                "Motor": {
+            "fms": {
+                "fm0": {
                     "channel": 0
+                }
+            },
+            "lcs": {
+                "lc0": {
+                    "channel": 0
+                }
+            },
+            "tcs": {
+                "tc2": {
+                    "channel": 0
+                },
+                "tc1": {
+                    "channel": 1
                 }
             }
         }
@@ -81,9 +80,6 @@
         },
         "fms": {
             "flowrate": null
-        },
-        "tachos": {
-            "rpm": null
         }
     }
 }

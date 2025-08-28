@@ -39,6 +39,7 @@ class SerialCommandScheduler:
         while self.running:
             self.timekeeper.cycle_start()
             asyncio.create_task(self.serial_manager.send_receive(self.command))
+            # backend_logger.info(json.dumps(self.command))
             await self.timekeeper.cycle_end()
     
     def stop(self):
