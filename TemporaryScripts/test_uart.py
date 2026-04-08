@@ -3,7 +3,7 @@ import time
 
 # Set up serial port
 ser = serial.Serial(
-    port='/dev/ttyAMA4',  # Use 'serial0' for the default UART on Pi
+    port='/dev/ttyAMA1',  # Use 'serial0' for the default UART on Pi
     baudrate=9600,
     timeout=1
 )
