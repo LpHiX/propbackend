@@ -20,6 +20,9 @@ class EngineAbortState(State):
                 #TODO SHOULD THIS TRIGGER AN ABORT?
                 # ----------------------------------
 
+        if self.state_machine.active_run_logger is not None:
+            self.state_machine.active_run_logger.write_data(self.state_machine.hardware_handler.boards)
+
 
     def teardown(self) -> None:
         pass

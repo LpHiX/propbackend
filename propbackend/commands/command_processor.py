@@ -8,6 +8,7 @@ from propbackend.state_machine.engine_abort_state import EngineAbortState
 from propbackend.state_machine.idle_state import IdleState
 from propbackend.utils import backend_logger
 from propbackend.utils import config_reader
+from propbackend.utils.boardstate_logger import BoardStateLogger
 
 if TYPE_CHECKING:
     from propbackend.hardware.hardware_handler import HardwareHandler
@@ -108,6 +109,13 @@ class CommandProcessor:
     #     return self.state_machine.hotfirecontroller.set_hotfire_sequence(data)
     
     def start_hotfire_sequence(self, data):
+        if self.state_machine.active_run_logger is not None:
+            self.state_machine.active_run_logger.log_event(
+                event_type="command_sent",
+                source="command_processor",
+                target="hotfire_sequence",
+                message="start_hotfire_sequence",
+            )
         return self.state_machine.transition_to(HotfireState())
 
     def get_boards_states(self, _):
@@ -131,6 +139,13 @@ class CommandProcessor:
         board = self.hardware_handler.get_board(board_name)
         if board is not None:
             board.update_desired_state(new_desired_state)
+            if self.state_machine.active_run_logger is not None:
+                self.state_machine.active_run_logger.log_event(
+                    event_type="command_applied",
+                    source="command_processor",
+                    target=board_name,
+                    message="update_desired_state",
+                )
         return 
 
     def get_hardware_json(self, _):
@@ -140,9 +155,23 @@ class CommandProcessor:
     #     return self.hardware_handler.set_config(data)
 
     async def reload_hardware_json(self, _):
+        if self.state_machine.active_run_logger is not None:
+            self.state_machine.active_run_logger.log_event(
+                event_type="command_sent",
+                source="command_processor",
+                target="hardware_config",
+                message="reload_hardware_json",
+            )
+
         self.hardware_handler.unload_hardware()
         config_reader.reload_config()
         await self.hardware_handler.load_hardware()
+
+        if self.state_machine.main_loop_logger is not None:
+            self.state_machine.main_loop_logger.close()
+            self.state_machine.main_loop_logger = BoardStateLogger("mainloop", self.hardware_handler)
+            self.state_machine.main_loop_logger.write_headers(self.hardware_handler.boards)
+
         return self.reply_str("reload hardware json", "Reloaded hardware json") 
 
     # async def send_receive(self, data):
@@ -161,9 +190,23 @@ class CommandProcessor:
 
         return "stop_task not implemented"
     def abort_engine(self, data):
+        if self.state_machine.active_run_logger is not None:
+            self.state_machine.active_run_logger.log_event(
+                event_type="abort",
+                source="command_processor",
+                target="engine",
+                message="abort_engine",
+            )
         return self.state_machine.transition_to(EngineAbortState())
     
     def return_to_idle(self, data):
+        if self.state_machine.active_run_logger is not None:
+            self.state_machine.active_run_logger.log_event(
+                event_type="command_sent",
+                source="command_processor",
+                target="state_machine",
+                message="return_to_idle",
+            )
         return self.state_machine.transition_to(IdleState())
 
     def fts(self, data):
