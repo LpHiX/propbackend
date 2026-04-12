@@ -41,7 +41,10 @@ class HotfireState(State):
                 # ----------------------------------
 
         if self.state_machine.active_run_logger is not None:
-            self.state_machine.active_run_logger.write_data(self.state_machine.hardware_handler.boards)
+            self.state_machine.active_run_logger.write_data(
+                self.state_machine.hardware_handler.boards,
+                timestamp_override=T,
+            )
         
         if self.hotfire_controller.is_hotfire_complete(time_statechange):
             backend_logger.info(f"Hotfire complete at T{T:.0f}s")

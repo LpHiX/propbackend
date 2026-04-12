@@ -4,12 +4,20 @@
             "is_actuator": true,
             "polling_interval": 0.1,
             "serial": {
-                "port": "/dev/ttyAMA0",
+                "port": "/dev/ttyAMA2",
                 "baudrate": 921600
             },
             "servos": {
                 "Motor": {
                     "channel": 0,
+                    "disarm_angle": 0
+                },
+                "PumpOutlet": {
+                    "channel": 1,
+                    "disarm_angle": 0
+                },
+                "PumpInlet": {
+                    "channel": 2,
                     "disarm_angle": 0
                 }
             },
@@ -33,7 +41,23 @@
                     "channel": 0,
                     "adc": true,
                     "offset": 2574.3,
-                    "gain": 0.045674
+                    "gain": 0.045674,
+                    "plot_group": "current"
+                }
+            }
+        },
+        "ThermoBoard": {
+            "polling_interval": 0.1,
+            "serial": {
+                "port": "/dev/ttyAMA0",
+                "baudrate": 921600
+            },
+            "tcs": {
+                "0": {
+                    "channel": 0
+                },
+                "1": {
+                    "channel": 1
                 }
             }
         }

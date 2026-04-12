@@ -7,6 +7,10 @@
                 "Motor": {
                     "armed": true,
                     "angle": 0
+                },
+                "PumpInlet": {
+                    "armed": true,
+                    "angle": 0
                 }
             },
             "solenoids": {
@@ -38,6 +42,11 @@
                     "Motor": {
                         "armed": true,
                         "angle": 20
+                    },
+                    "PumpInlet": {
+                        "armed": true,
+                        "angle": 180,
+                        "ramp_to_next": true
                     }
                 }
             }
@@ -47,18 +56,27 @@
                 "servos": {
                     "Motor": {
                         "armed": true,
-                        "angle": 20,
+                        "angle": 0,
+                        "ramp_to_next": true
+                    },
+                    "PumpInlet": {
+                        "armed": true,
+                        "angle": 180,
                         "ramp_to_next": true
                     }
                 }
             }
         },
-        "10": {
+        "3": {
             "ActuatorBoard": {
                 "servos": {
                     "Motor": {
                         "armed": true,
-                        "angle": 40
+                        "angle": 180
+                    },
+                    "PumpInlet": {
+                        "armed": true,
+                        "angle": 0
                     }
                 }
             }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+from typing import TYPE_CHECKING
 
 from propbackend.state_machine.base_state import State
 from propbackend.utils import backend_logger
@@ -14,6 +15,9 @@ from propbackend.state_machine.launch_state import LaunchState
 from propbackend.state_machine.hover_state import HoverState
 
 from propbackend.hardware.hardware_handler import HardwareHandler
+
+if TYPE_CHECKING:
+    from propbackend.utils.boardstate_logger import BoardStateLogger
 
 
 
@@ -31,8 +35,9 @@ class StateMachine:
         self.hardware_handler = hardware_handler
 
         self._state: State | None = None
-        self.active_run_logger = None
-        self.main_loop_logger = None
+        self.active_run_logger: BoardStateLogger | None = None
+        self.active_run_time_offset: float | None = None
+        self.main_loop_logger: BoardStateLogger | None = None
         self.time_keeper = TimeKeeper(name="StateMachineTimeKeeper", cycle_time=0.01, debug_time=60)
         self.transition_to(StartupState())
 
@@ -42,6 +47,11 @@ class StateMachine:
         previous_state = self._state
         previous_name = type(self._state).__name__ if self._state is not None else "None"
         target_name = type(state).__name__
+
+        if isinstance(previous_state, HotfireState) and isinstance(state, EngineAbortState):
+            if self.time_keeper is not None:
+                time_statechange = self.time_keeper.time_since_statechange()
+                self.active_run_time_offset = previous_state.hotfire_controller.get_T(time_statechange)
         if self._state is not None:
             transition_valid, reason = self._state.can_transition_to(state)
             if not transition_valid:
@@ -53,6 +63,9 @@ class StateMachine:
         self._state = state
         self._state.state_machine = self
         self._state.setup()
+
+        if isinstance(state, HotfireState):
+            self.active_run_time_offset = None
 
         if self.active_run_logger is not None:
             self.active_run_logger.log_event(
@@ -67,6 +80,7 @@ class StateMachine:
             if self.active_run_logger is not None:
                 self.active_run_logger.close()
                 self.active_run_logger = None
+            self.active_run_time_offset = None
 
         self.time_keeper.statechange()
         backend_logger.debug(f"State {type(self._state).__name__} setup complete")

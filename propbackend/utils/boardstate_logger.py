@@ -24,6 +24,7 @@ class ChannelSpec:
     channel_name: str
     unit: str
     signal_type: str
+    is_adc: bool
 
 
 class BoardStateLogger:
@@ -71,26 +72,27 @@ class BoardStateLogger:
         self.default_signal_type = self.logging_config.get('default_signal_type', 'sensor')
         self.demand_signal_type = self.logging_config.get('demand_signal_type', 'actuator_demand')
         self.unknown_unit = self.logging_config.get('unknown_unit', 'unknown')
+        self.status_state_names = set(self.logging_config.get('status_state_names', ['armed', 'powered', 'state']))
         self.schema_version = self.logging_config.get('schema_version', '1.0')
 
         self.channel_datasets: dict[str, dict[str, h5py.Dataset]] = {}
         self.channel_meta: dict[str, dict[str, str]] = {}
         self.channel_name_counts: dict[str, int] = {}
+        self.status_datasets: dict[str, dict[str, h5py.Dataset]] = {}
+        self.status_specs: list[ChannelSpec] = []
         self.state_channel_map: dict[tuple[str, str, str, str], str] = {}
         self.demand_channel_map: dict[tuple[str, str, str, str], str] = {}
+        self.state_status_map: dict[tuple[str, str, str, str], str] = {}
+        self.demand_status_map: dict[tuple[str, str, str, str], str] = {}
         self.channel_specs: list[ChannelSpec] = []
 
         self.h5_channels = self.h5_file.create_group('channels')
+        self.h5_status = self.h5_file.create_group('status')
         self.h5_config = self.h5_file.create_group('config')
-        self.h5_groups = self.h5_file.create_group('groups')
-        self.h5_events = self.h5_file.create_group('events')
-        self.h5_debug = self.h5_file.create_group('debug')
         self.h5_calibration: h5py.Group | None = None
         self.h5_channel_units: h5py.Group | None = None
 
         self._init_config_groups()
-        self._init_events_datasets()
-        self._channel_source_rows: list[tuple[str, str, str, str, str, int | None]] = []
 
     def _generate_report(self) -> None:
         if not self.auto_generate_report:
@@ -114,14 +116,6 @@ class BoardStateLogger:
         self.h5_config.create_dataset('hardware_json', data=json.dumps(config_reader.get_config()), dtype=string_dt)
         self.h5_calibration = self.h5_config.create_group('calibration')
         self.h5_channel_units = self.h5_config.create_group('channel_units')
-
-    def _init_events_datasets(self) -> None:
-        string_dt = h5py.string_dtype(encoding='utf-8')
-        self.events_time = self.h5_events.create_dataset('time', shape=(0,), maxshape=(None,), dtype='f8')
-        self.events_type = self.h5_events.create_dataset('type', shape=(0,), maxshape=(None,), dtype=string_dt)
-        self.events_source = self.h5_events.create_dataset('source', shape=(0,), maxshape=(None,), dtype=string_dt)
-        self.events_target = self.h5_events.create_dataset('target', shape=(0,), maxshape=(None,), dtype=string_dt)
-        self.events_message = self.h5_events.create_dataset('message', shape=(0,), maxshape=(None,), dtype=string_dt)
 
     def _append_scalar(self, dataset: h5py.Dataset, value):
         next_index = dataset.shape[0]
@@ -169,27 +163,42 @@ class BoardStateLogger:
             return self.demand_signal_type
         return self.signal_type_by_hw_type.get(hw_type, self.default_signal_type)
 
-    def _create_channel(self, channel_name: str, unit: str, signal_type: str, hw_type: str) -> None:
+    def _is_status_state(self, state_name: str) -> bool:
+        return state_name in self.status_state_names
+
+    def _plot_group_for(self, hw_type: str, item_data: dict) -> str:
+        if isinstance(item_data, dict):
+            explicit = item_data.get('plot_group')
+            if isinstance(explicit, str) and explicit.strip():
+                return explicit.strip()
+        return self.groups_by_hw_type.get(hw_type, 'misc')
+
+    def _create_channel(self, channel_name: str, unit: str, signal_type: str, hw_type: str, is_adc: bool, plot_group: str) -> None:
         if channel_name in self.channel_datasets:
             return
 
         channel_group = self.h5_channels.create_group(channel_name)
         channel_group.attrs['unit'] = unit
         channel_group.attrs['signal_type'] = signal_type
+        channel_group.attrs['plot_group'] = plot_group
 
         time_ds = channel_group.create_dataset('time', shape=(0,), maxshape=(None,), dtype='f8')
-        raw_ds = channel_group.create_dataset('raw', shape=(0,), maxshape=(None,), dtype='f8')
         data_ds = channel_group.create_dataset('data', shape=(0,), maxshape=(None,), dtype='f8')
 
-        self.channel_datasets[channel_name] = {
+        datasets: dict[str, h5py.Dataset] = {
             'time': time_ds,
-            'raw': raw_ds,
             'data': data_ds,
         }
+        if is_adc:
+            datasets['raw'] = channel_group.create_dataset('raw', shape=(0,), maxshape=(None,), dtype='f8')
+
+        self.channel_datasets[channel_name] = datasets
         self.channel_meta[channel_name] = {
             'unit': unit,
             'signal_type': signal_type,
             'hw_type': hw_type,
+            'is_adc': '1' if is_adc else '0',
+            'plot_group': plot_group,
         }
 
         if self.h5_channel_units is not None:
@@ -225,6 +234,9 @@ class BoardStateLogger:
             return (data_value - offset) / gain
         return data_value
 
+    def _is_adc_item(self, item_data: dict) -> bool:
+        return isinstance(item_data, dict) and bool(item_data.get('adc'))
+
     def _register_channel_metadata(self, board: Board, hw_type: str, item_name: str, state_name: str, channel_name: str, item_data: dict) -> None:
         if not isinstance(item_data, dict):
             return
@@ -232,8 +244,6 @@ class BoardStateLogger:
         source_channel = item_data.get('channel')
         if not isinstance(source_channel, int):
             source_channel = None
-
-        self._channel_source_rows.append((channel_name, board.name, hw_type, item_name, state_name, source_channel))
 
         if item_data.get('adc'):
             if self.h5_calibration is not None:
@@ -246,8 +256,40 @@ class BoardStateLogger:
     def _append_channel_sample(self, channel_name: str, t: float, raw_value, data_value) -> None:
         datasets = self.channel_datasets[channel_name]
         self._append_scalar(datasets['time'], t)
-        self._append_scalar(datasets['raw'], self._to_numeric_or_nan(raw_value))
+        if 'raw' in datasets:
+            self._append_scalar(datasets['raw'], self._to_numeric_or_nan(raw_value))
         self._append_scalar(datasets['data'], self._to_numeric_or_nan(data_value))
+
+    def _status_name(self, board_name: str, hw_type: str, item_name: str, state_name: str, is_demand: bool) -> str:
+        suffix = '_demand' if is_demand else ''
+        return self._normalize_channel_name(f"{board_name}_{hw_type}_{item_name}_{state_name}{suffix}")
+
+    def _get_or_create_status_name(self, board_name: str, hw_type: str, item_name: str, state_name: str, is_demand: bool) -> str:
+        key = (board_name, hw_type, item_name, state_name)
+        status_map = self.demand_status_map if is_demand else self.state_status_map
+        if key in status_map:
+            return status_map[key]
+        status_name = self._status_name(board_name, hw_type, item_name, state_name, is_demand)
+        status_map[key] = status_name
+        return status_name
+
+    def _create_status_dataset(self, status_name: str) -> None:
+        if status_name in self.status_datasets:
+            return
+        status_group = self.h5_status.create_group(status_name)
+        time_ds = status_group.create_dataset('time', shape=(0,), maxshape=(None,), dtype='f8')
+        value_ds = status_group.create_dataset('value', shape=(0,), maxshape=(None,), dtype='f8')
+        self.status_datasets[status_name] = {
+            'time': time_ds,
+            'value': value_ds,
+        }
+
+    def _append_status_sample(self, status_name: str, t: float, value) -> None:
+        datasets = self.status_datasets.get(status_name)
+        if datasets is None:
+            return
+        self._append_scalar(datasets['time'], t)
+        self._append_scalar(datasets['value'], self._to_numeric_or_nan(value))
 
     def _iter_tree_entries(self, board: Board, tree_name: str) -> Iterable[tuple[str, str, dict[str, Any], str]]:
         tree = getattr(board, tree_name, {})
@@ -269,23 +311,45 @@ class BoardStateLogger:
         channel_name = self._build_channel_name(board, hw_type, item_name, state_name, is_demand)
         unit = self._get_unit(item_data, state_name)
         signal_type = self._signal_type_for(hw_type, is_demand)
-        self._create_channel(channel_name, unit, signal_type, hw_type)
+        plot_group = self._plot_group_for(hw_type, item_data)
+        self._create_channel(channel_name, unit, signal_type, hw_type, self._is_adc_item(item_data), plot_group)
         self._register_channel_metadata(board, hw_type, item_name, state_name, channel_name, item_data)
         return channel_name
 
-    def _append_entry_sample(self, channel_name: str, t: float, item_data: dict, value, is_demand: bool) -> None:
+    def _register_status_spec(self, board: Board, hw_type: str, item_name: str, item_data: dict, state_name: str, is_demand: bool) -> ChannelSpec:
+        status_name = self._get_or_create_status_name(board.name, hw_type, item_name, state_name, is_demand)
+        self._create_status_dataset(status_name)
+        return ChannelSpec(
+            board_name=board.name,
+            hw_type=hw_type,
+            item_name=item_name,
+            state_name=state_name,
+            is_demand=is_demand,
+            channel_name=status_name,
+            unit=self._get_unit(item_data, state_name),
+            signal_type='status',
+            is_adc=False,
+        )
+
+    def _append_entry_sample(self, channel_name: str, t: float, item_data: dict, value, is_demand: bool, is_adc: bool) -> None:
         if channel_name not in self.channel_datasets:
             return
-        if is_demand:
-            self._append_channel_sample(channel_name, t, value, value)
+        if is_demand or not is_adc:
+            self._append_channel_sample(channel_name, t, float('nan'), value)
         else:
             raw_value = self._get_raw_value(item_data, value)
             self._append_channel_sample(channel_name, t, raw_value, value)
 
     def _build_channel_specs(self, boards: list[Board]) -> list[ChannelSpec]:
         specs: list[ChannelSpec] = []
+        self.status_specs = []
         for board in boards:
             for hw_type, item_name, item_data, state_name in self._iter_tree_entries(board, 'state'):
+                if self._is_status_state(state_name):
+                    self.status_specs.append(
+                        self._register_status_spec(board, hw_type, item_name, item_data, state_name, is_demand=False)
+                    )
+                    continue
                 channel_name = self._register_entry_channel(board, hw_type, item_name, item_data, state_name, is_demand=False)
                 specs.append(
                     ChannelSpec(
@@ -297,10 +361,16 @@ class BoardStateLogger:
                         channel_name=channel_name,
                         unit=self._get_unit(item_data, state_name),
                         signal_type=self._signal_type_for(hw_type, False),
+                        is_adc=self._is_adc_item(item_data),
                     )
                 )
 
             for hw_type, item_name, item_data, state_name in self._iter_tree_entries(board, 'desired_state'):
+                if self._is_status_state(state_name):
+                    self.status_specs.append(
+                        self._register_status_spec(board, hw_type, item_name, item_data, state_name, is_demand=True)
+                    )
+                    continue
                 channel_name = self._register_entry_channel(board, hw_type, item_name, item_data, state_name, is_demand=True)
                 specs.append(
                     ChannelSpec(
@@ -312,6 +382,7 @@ class BoardStateLogger:
                         channel_name=channel_name,
                         unit=self._get_unit(item_data, state_name),
                         signal_type=self._signal_type_for(hw_type, True),
+                        is_adc=False,
                     )
                 )
         return specs
@@ -329,55 +400,18 @@ class BoardStateLogger:
 
         return item_data.get(spec.state_name), item_data
 
-    def _write_debug_source_map(self) -> None:
-        string_dt = h5py.string_dtype(encoding='utf-8')
-        source_map = self.h5_debug.require_group('channel_source_map')
-
-        for dataset_name in ('channel_name', 'board_name', 'hw_type', 'item_name', 'state_name', 'channel_number'):
-            if dataset_name in source_map:
-                del source_map[dataset_name]
-
-        channel_names = [row[0] for row in self._channel_source_rows]
-        board_names = [row[1] for row in self._channel_source_rows]
-        hw_types = [row[2] for row in self._channel_source_rows]
-        item_names = [row[3] for row in self._channel_source_rows]
-        state_names = [row[4] for row in self._channel_source_rows]
-        channel_numbers = [(-1 if row[5] is None else row[5]) for row in self._channel_source_rows]
-
-        source_map.create_dataset('channel_name', data=channel_names, dtype=string_dt)
-        source_map.create_dataset('board_name', data=board_names, dtype=string_dt)
-        source_map.create_dataset('hw_type', data=hw_types, dtype=string_dt)
-        source_map.create_dataset('item_name', data=item_names, dtype=string_dt)
-        source_map.create_dataset('state_name', data=state_names, dtype=string_dt)
-        source_map.create_dataset('channel_number', data=channel_numbers, dtype='i4')
-
-    def _write_groups_index(self) -> None:
-        group_channels: dict[str, list[str]] = {}
-        for channel_name in self.channel_meta.keys():
-            hw_type = self.channel_meta[channel_name].get('hw_type', 'misc')
-            bucket = self._classify_group(hw_type)
-            group_channels.setdefault(bucket, []).append(f"/channels/{channel_name}")
-
-        string_dt = h5py.string_dtype(encoding='utf-8')
-        for group_name, channels in group_channels.items():
-            group = self.h5_groups.require_group(group_name)
-            if 'channels' in group:
-                del group['channels']
-            group.create_dataset('channels', data=channels, dtype=string_dt)
-    
     def write_headers(self, boards: list[Board]):
         self.channel_specs = self._build_channel_specs(boards)
         headers: list[str] = ["timestamp", *[spec.channel_name for spec in self.channel_specs]]
         
         if self.csv_writer is not None:
             self.csv_writer.writerow(headers)
-        self._write_groups_index()
 
-    def write_data(self, boards: list[Board]):
+    def write_data(self, boards: list[Board], timestamp_override: float | None = None):
         if not self.channel_specs:
             self.write_headers(boards)
 
-        t = time.perf_counter() - self.start_time
+        t = timestamp_override if timestamp_override is not None else (time.perf_counter() - self.start_time)
         data: list[object] = [t]
         boards_by_name = {board.name: board for board in boards}
 
@@ -390,7 +424,15 @@ class BoardStateLogger:
                 value, item_data = self._get_value_from_spec(board, spec)
 
             data.append(value)
-            self._append_entry_sample(spec.channel_name, t, item_data, value, spec.is_demand)
+            self._append_entry_sample(spec.channel_name, t, item_data, value, spec.is_demand, spec.is_adc)
+
+        for spec in self.status_specs:
+            board = boards_by_name.get(spec.board_name)
+            if board is None:
+                status_value = None
+            else:
+                status_value, _ = self._get_value_from_spec(board, spec)
+            self._append_status_sample(spec.channel_name, t, status_value)
 
         if self.current_csv and self.csv_writer is not None:
             self.csv_writer.writerow(data)
@@ -400,14 +442,8 @@ class BoardStateLogger:
             self.h5_file.flush()
 
     def log_event(self, event_type: str, source: str, target: str, message: str) -> None:
-        if not self.h5_file:
-            return
-        t = time.perf_counter() - self.start_time
-        self._append_scalar(self.events_time, t)
-        self._append_scalar(self.events_type, event_type)
-        self._append_scalar(self.events_source, source)
-        self._append_scalar(self.events_target, target)
-        self._append_scalar(self.events_message, message)
+        # Events are intentionally not persisted in H5 for current schema.
+        return
 
     def close(self):
         if self.current_csv:
@@ -415,7 +451,6 @@ class BoardStateLogger:
             print(f"BoardStateLogger: Closed CSV file {self.file_name}")
 
         if self.h5_file:
-            self._write_debug_source_map()
             self.h5_file.flush()
             self.h5_file.close()
 

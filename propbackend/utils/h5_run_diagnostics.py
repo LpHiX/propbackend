@@ -12,74 +12,84 @@ except ImportError:  # pragma: no cover
     plt = None
 
 
-def read_text_array(dataset) -> List[str]:
-    values = dataset[()]
-    if isinstance(values, (bytes, str)):
-        return [values.decode("utf-8") if isinstance(values, bytes) else values]
-    result = []
-    for value in values:
-        if isinstance(value, bytes):
-            result.append(value.decode("utf-8"))
-        else:
-            result.append(str(value))
-    return result
+STATUS_SUFFIXES = ("_armed", "_armed_demand", "_powered", "_powered_demand", "_state", "_state_demand")
+
+
+def is_status_channel(name: str) -> bool:
+    return name.endswith(STATUS_SUFFIXES)
 
 
 def load_channels(h5: h5py.File) -> Dict[str, Dict[str, np.ndarray]]:
     channels = {}
     if "channels" not in h5:
         return channels
+    channels_root = h5["channels"]
+    if not isinstance(channels_root, h5py.Group):
+        return channels
 
-    for channel_name in h5["channels"].keys():
-        group = h5["channels"][channel_name]
+    for channel_name in channels_root.keys():
+        group = channels_root[channel_name]
         if not isinstance(group, h5py.Group):
             continue
-        if not all(key in group for key in ("time", "raw", "data")):
+        if not all(key in group for key in ("time", "data")):
+            continue
+        time_ds = group["time"]
+        data_ds = group["data"]
+        raw_ds = group["raw"] if "raw" in group else None
+        if not isinstance(time_ds, h5py.Dataset):
+            continue
+        if not isinstance(data_ds, h5py.Dataset):
+            continue
+        if raw_ds is not None and not isinstance(raw_ds, h5py.Dataset):
             continue
 
+        data_np = np.asarray(data_ds[:], dtype=float)
+        if raw_ds is None:
+            raw_np = np.full(data_np.shape, np.nan, dtype=float)
+        else:
+            raw_np = np.asarray(raw_ds[:], dtype=float)
+
         channels[channel_name] = {
-            "time": np.asarray(group["time"][:], dtype=float),
-            "raw": np.asarray(group["raw"][:], dtype=float),
-            "data": np.asarray(group["data"][:], dtype=float),
+            "time": np.asarray(time_ds[:], dtype=float),
+            "raw": raw_np,
+            "data": data_np,
             "unit": str(group.attrs.get("unit", "")),
             "signal_type": str(group.attrs.get("signal_type", "")),
+            "plot_group": str(group.attrs.get("plot_group", "")),
         }
     return channels
 
 
-def load_events(h5: h5py.File) -> Dict[str, List]:
-    events = {"time": [], "type": [], "source": [], "target": [], "message": []}
-    if "events" not in h5:
-        return events
-
-    event_group = h5["events"]
-    required = ("time", "type", "source", "target", "message")
-    if not all(name in event_group for name in required):
-        return events
-
-    events["time"] = list(np.asarray(event_group["time"][:], dtype=float))
-    for key in ("type", "source", "target", "message"):
-        events[key] = read_text_array(event_group[key])
-    return events
-
-
-def channel_names_from_group(h5: h5py.File, group_path: str) -> List[str]:
-    if group_path not in h5:
-        return []
-    group = h5[group_path]
-    if not isinstance(group, h5py.Group) or "channels" not in group:
-        return []
-
-    raw_paths = read_text_array(group["channels"])
-    return [path.split("/")[-1] for path in raw_paths]
+def pick_channels(channels: Dict[str, Dict[str, np.ndarray]], prefixes: Tuple[str, ...], include_demands: bool = False, plot_group: str | None = None) -> List[str]:
+    names = []
+    for name, payload in channels.items():
+        if is_status_channel(name):
+            continue
+        if not include_demands and payload["signal_type"] == "actuator_demand":
+            continue
+        tagged_group = payload.get("plot_group", "")
+        if plot_group is not None:
+            if tagged_group:
+                if tagged_group != plot_group:
+                    continue
+            else:
+                if not name.startswith(prefixes):
+                    continue
+        else:
+            if not name.startswith(prefixes):
+                continue
+        names.append(name)
+    return sorted(names)
 
 
 def summarize_channels(channels: Dict[str, Dict[str, np.ndarray]]) -> List[str]:
     lines = []
     lines.append(f"Channels discovered: {len(channels)}")
+    lines.append(f"Status-like channels in /channels: {sum(1 for name in channels if is_status_channel(name))}")
 
     mismatched = []
     nan_heavy = []
+    raw_populated_non_adc = []
 
     for name, payload in channels.items():
         t_len = len(payload["time"])
@@ -93,6 +103,11 @@ def summarize_channels(channels: Dict[str, Dict[str, np.ndarray]]) -> List[str]:
             if nan_ratio > 0.5:
                 nan_heavy.append((name, nan_ratio))
 
+        if payload.get("signal_type") != "sensor" and d_len > 0:
+            raw = payload["raw"]
+            if np.isfinite(raw).any():
+                raw_populated_non_adc.append(name)
+
     lines.append(f"Channels with length mismatch: {len(mismatched)}")
     for name, t_len, r_len, d_len in mismatched[:10]:
         lines.append(f"  - {name}: time={t_len}, raw={r_len}, data={d_len}")
@@ -101,6 +116,10 @@ def summarize_channels(channels: Dict[str, Dict[str, np.ndarray]]) -> List[str]:
     for name, ratio in sorted(nan_heavy, key=lambda x: x[1], reverse=True)[:10]:
         lines.append(f"  - {name}: nan_ratio={ratio:.2f}")
 
+    lines.append(f"Non-sensor channels with finite raw values: {len(raw_populated_non_adc)}")
+    for name in raw_populated_non_adc[:10]:
+        lines.append(f"  - {name}")
+
     return lines
 
 
@@ -108,25 +127,23 @@ def build_actuator_pairs(channels: Dict[str, Dict[str, np.ndarray]]) -> List[Tup
     names = set(channels.keys())
     pairs = []
     for name in sorted(names):
+        if is_status_channel(name):
+            continue
         if not name.endswith("_demand"):
             continue
+        if channels[name]["signal_type"] != "actuator_demand":
+            continue
+
         base = name[:-7]
         candidates = [f"{base}_actual", base]
         for candidate in candidates:
-            if candidate in names:
+            if candidate in names and channels[candidate]["signal_type"] == "actuator_actual":
                 pairs.append((name, candidate))
                 break
     return pairs
 
 
-def add_event_lines(ax, events: Dict[str, List], max_lines: int = 50) -> None:
-    if not events["time"]:
-        return
-    for t in events["time"][:max_lines]:
-        ax.axvline(t, color="gray", alpha=0.15, linewidth=0.8)
-
-
-def plot_channel_set(ax, channels: Dict[str, Dict[str, np.ndarray]], names: List[str], title: str, events: Dict[str, List]) -> None:
+def plot_channel_set(ax, channels: Dict[str, Dict[str, np.ndarray]], names: List[str], title: str) -> None:
     for name in names:
         if name not in channels:
             continue
@@ -135,7 +152,6 @@ def plot_channel_set(ax, channels: Dict[str, Dict[str, np.ndarray]], names: List
         if len(x) == 0:
             continue
         ax.plot(x, y, label=name, linewidth=1.3)
-    add_event_lines(ax, events)
     ax.set_title(title)
     ax.set_xlabel("time_s")
     ax.grid(alpha=0.25)
@@ -143,89 +159,101 @@ def plot_channel_set(ax, channels: Dict[str, Dict[str, np.ndarray]], names: List
         ax.legend(fontsize=8, ncols=2)
 
 
-def make_plots(h5: h5py.File, channels: Dict[str, Dict[str, np.ndarray]], events: Dict[str, List], output_dir: Path) -> List[Path]:
+def make_plots(channels: Dict[str, Dict[str, np.ndarray]], output_dir: Path) -> List[Path]:
     if plt is None:
         return []
 
     output_files = []
 
-    pressure_names = channel_names_from_group(h5, "/groups/pressure")
-    if not pressure_names:
-        pressure_names = [name for name in channels.keys() if name.startswith("pts_") or "pt_" in name]
-
+    pressure_names = pick_channels(channels, ("pts_", "pt_"), plot_group="pressure")
+    temperature_names = pick_channels(channels, ("tcs_", "tc_", "temp_", "temperature_"), plot_group="temperature")
+    flowmeter_names = pick_channels(channels, ("fms_", "flow_", "flowmeter_"), plot_group="flow")
     actuator_pairs = build_actuator_pairs(channels)
 
-    rotational_names = channel_names_from_group(h5, "/groups/rotational")
-    if not rotational_names:
-        rotational_names = [name for name in channels.keys() if "rpm" in name or "tacho" in name]
+    if pressure_names:
+        pressure_plot_path = output_dir / "01_pressure_channels.png"
+        fig, ax = plt.subplots(figsize=(12, 4.5))
+        plot_channel_set(ax, channels, pressure_names[:12], "Pressure channels")
+        fig.tight_layout()
+        fig.savefig(pressure_plot_path, dpi=140)
+        plt.close(fig)
+        output_files.append(pressure_plot_path)
 
-    event_plot_path = output_dir / "01_events_timeline.png"
-    fig, ax = plt.subplots(figsize=(12, 3.5))
-    if events["time"]:
-        event_types = sorted(set(events["type"]))
-        event_y = {event_type: idx for idx, event_type in enumerate(event_types)}
-        yvals = [event_y[event_type] for event_type in events["type"]]
-        ax.scatter(events["time"], yvals, s=22)
-        ax.set_yticks(range(len(event_types)))
-        ax.set_yticklabels(event_types)
-    ax.set_title("Event timeline")
-    ax.set_xlabel("time_s")
-    ax.grid(alpha=0.25)
-    fig.tight_layout()
-    fig.savefig(event_plot_path, dpi=140)
-    plt.close(fig)
-    output_files.append(event_plot_path)
+    if temperature_names:
+        temperature_plot_path = output_dir / "02_temperature_channels.png"
+        fig, ax = plt.subplots(figsize=(12, 4.5))
+        plot_channel_set(ax, channels, temperature_names[:12], "Temperature channels")
+        fig.tight_layout()
+        fig.savefig(temperature_plot_path, dpi=140)
+        plt.close(fig)
+        output_files.append(temperature_plot_path)
 
-    pressure_plot_path = output_dir / "02_pressure_channels.png"
-    fig, ax = plt.subplots(figsize=(12, 4.5))
-    plot_channel_set(ax, channels, pressure_names[:10], "Pressure channels", events)
-    fig.tight_layout()
-    fig.savefig(pressure_plot_path, dpi=140)
-    plt.close(fig)
-    output_files.append(pressure_plot_path)
+    if flowmeter_names:
+        flowmeter_plot_path = output_dir / "03_flowmeter_channels.png"
+        fig, ax = plt.subplots(figsize=(12, 4.5))
+        plot_channel_set(ax, channels, flowmeter_names[:12], "Flowmeter channels")
+        fig.tight_layout()
+        fig.savefig(flowmeter_plot_path, dpi=140)
+        plt.close(fig)
+        output_files.append(flowmeter_plot_path)
 
-    actuator_plot_path = output_dir / "03_actuator_demand_vs_actual.png"
-    fig, ax = plt.subplots(figsize=(12, 5.0))
-    for demand_name, actual_name in actuator_pairs[:12]:
-        d = channels[demand_name]
-        a = channels[actual_name]
-        if len(d["time"]) > 0:
-            ax.plot(d["time"], d["data"], linestyle="--", linewidth=1.2, label=demand_name)
-        if len(a["time"]) > 0:
-            ax.plot(a["time"], a["data"], linewidth=1.2, label=actual_name)
-    add_event_lines(ax, events)
-    ax.set_title("Actuator demand vs actual")
-    ax.set_xlabel("time_s")
-    ax.grid(alpha=0.25)
-    if actuator_pairs:
+    servo_pairs = [(demand, actual) for demand, actual in actuator_pairs if demand.startswith("servos_")]
+    solenoid_pairs = [(demand, actual) for demand, actual in actuator_pairs if demand.startswith("solenoids_")]
+
+    if servo_pairs:
+        servo_plot_path = output_dir / "04_servos_demand_vs_actual.png"
+        fig, ax = plt.subplots(figsize=(12, 5.0))
+        for demand_name, actual_name in servo_pairs[:12]:
+            d = channels[demand_name]
+            a = channels[actual_name]
+            if len(d["time"]) > 0:
+                ax.plot(d["time"], d["data"], linestyle="--", linewidth=1.2, label=demand_name)
+            if len(a["time"]) > 0:
+                ax.plot(a["time"], a["data"], linewidth=1.2, label=actual_name)
+        ax.set_title("Servo demand vs actual")
+        ax.set_xlabel("time_s")
+        ax.grid(alpha=0.25)
         ax.legend(fontsize=8, ncols=2)
-    fig.tight_layout()
-    fig.savefig(actuator_plot_path, dpi=140)
-    plt.close(fig)
-    output_files.append(actuator_plot_path)
+        fig.tight_layout()
+        fig.savefig(servo_plot_path, dpi=140)
+        plt.close(fig)
+        output_files.append(servo_plot_path)
 
-    rotational_plot_path = output_dir / "04_rotational_and_misc.png"
-    fig, ax = plt.subplots(figsize=(12, 4.5))
-    plot_channel_set(ax, channels, rotational_names[:10], "Rotational channels", events)
-    fig.tight_layout()
-    fig.savefig(rotational_plot_path, dpi=140)
-    plt.close(fig)
-    output_files.append(rotational_plot_path)
+    if solenoid_pairs:
+        solenoid_plot_path = output_dir / "05_solenoids_demand_vs_actual.png"
+        fig, ax = plt.subplots(figsize=(12, 5.0))
+        for demand_name, actual_name in solenoid_pairs[:12]:
+            d = channels[demand_name]
+            a = channels[actual_name]
+            if len(d["time"]) > 0:
+                ax.plot(d["time"], d["data"], linestyle="--", linewidth=1.2, label=demand_name)
+            if len(a["time"]) > 0:
+                ax.plot(a["time"], a["data"], linewidth=1.2, label=actual_name)
+        ax.set_title("Solenoid demand vs actual")
+        ax.set_xlabel("time_s")
+        ax.grid(alpha=0.25)
+        ax.legend(fontsize=8, ncols=2)
+        fig.tight_layout()
+        fig.savefig(solenoid_plot_path, dpi=140)
+        plt.close(fig)
+        output_files.append(solenoid_plot_path)
 
     return output_files
 
 
-def write_summary(output_dir: Path, summary_lines: List[str], event_count: int, actuator_pairs: List[Tuple[str, str]]) -> Path:
+def write_summary(output_dir: Path, summary_lines: List[str], actuator_pairs: List[Tuple[str, str]], plots: List[Path]) -> Path:
     summary_path = output_dir / "summary.txt"
     with open(summary_path, "w", encoding="utf-8") as f:
         f.write("Run diagnostics summary\n")
         f.write("======================\n\n")
         for line in summary_lines:
             f.write(f"{line}\n")
-        f.write(f"\nEvent count: {event_count}\n")
-        f.write(f"Actuator demand/actual pairs: {len(actuator_pairs)}\n")
+        f.write(f"\nActuator demand/actual pairs: {len(actuator_pairs)}\n")
         for demand_name, actual_name in actuator_pairs[:20]:
             f.write(f"  - {demand_name} <-> {actual_name}\n")
+        f.write(f"\nPlots generated: {len(plots)}\n")
+        for plot_path in plots:
+            f.write(f"  - {plot_path.name}\n")
     return summary_path
 
 
@@ -243,14 +271,15 @@ def generate_run_report(h5_path: str | Path, output_dir: str | Path | None = Non
 
     with h5py.File(h5_path, "r") as h5:
         channels = load_channels(h5)
-        events = load_events(h5)
 
         summary_lines = summarize_channels(channels)
         actuator_pairs = build_actuator_pairs(channels)
-        summary_path = write_summary(output_dir_path, summary_lines, len(events["time"]), actuator_pairs)
+        plots: List[Path] = []
 
         if include_plots:
-            make_plots(h5, channels, events, output_dir_path)
+            plots = make_plots(channels, output_dir_path)
+
+        summary_path = write_summary(output_dir_path, summary_lines, actuator_pairs, plots)
 
     return summary_path
 

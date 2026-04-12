@@ -21,7 +21,13 @@ class EngineAbortState(State):
                 # ----------------------------------
 
         if self.state_machine.active_run_logger is not None:
-            self.state_machine.active_run_logger.write_data(self.state_machine.hardware_handler.boards)
+            timestamp_override = None
+            if self.state_machine.active_run_time_offset is not None:
+                timestamp_override = self.state_machine.active_run_time_offset + self.state_machine.time_keeper.time_since_statechange()
+            self.state_machine.active_run_logger.write_data(
+                self.state_machine.hardware_handler.boards,
+                timestamp_override=timestamp_override,
+            )
 
 
     def teardown(self) -> None:
