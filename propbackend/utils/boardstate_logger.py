@@ -10,10 +10,10 @@ from propbackend.utils import config_reader
 class BoardStateLogger:
     def __init__(self, name, hardware_handler: HardwareHandler, log_dir="/mnt/proppi_data/logs"):
         self.name = name
-        self.log_dir = log_dir
+        self.log_dir = os.path.join(log_dir, datetime.now().strftime('%Y%m%d'))
         self.hardware_handler = hardware_handler
 
-        os.makedirs(log_dir, exist_ok=True)
+        os.makedirs(self.log_dir, exist_ok=True)
 
         self.file_name = f"test_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{self.name}.csv"
         self.csv_path = f"{self.log_dir}/{self.file_name}"

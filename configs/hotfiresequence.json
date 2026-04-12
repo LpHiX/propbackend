@@ -8,37 +8,57 @@
                     "armed": true,
                     "angle": 0
                 }
+            },
+            "solenoids": {
+                "rl": {
+                    "armed": false,
+                    "powered": false
+                },
+                "sl": {
+                    "armed": false,
+                    "powered": false
+                }
             }
         }
     },
     "sequence": {
+        "-3": {
+            "ActuatorBoard": {
+                "solenoids": {
+                    "rl": {
+                        "armed": true,
+                        "powered": true
+                    }
+                }
+            }
+        },
         "0": {
             "ActuatorBoard": {
                 "servos": {
                     "Motor": {
                         "armed": true,
-                        "angle": 40,
+                        "angle": 20
+                    }
+                }
+            }
+        },
+        "2": {
+            "ActuatorBoard": {
+                "servos": {
+                    "Motor": {
+                        "armed": true,
+                        "angle": 20,
                         "ramp_to_next": true
                     }
                 }
             }
         },
-        "4": {
+        "10": {
             "ActuatorBoard": {
                 "servos": {
                     "Motor": {
                         "armed": true,
-                        "angle": 200
-                    }
-                }
-            }
-        },
-        "40": {
-            "ActuatorBoard": {
-                "servos": {
-                    "Motor": {
-                        "armed": true,
-                        "angle": 200
+                        "angle": 40
                     }
                 }
             }
