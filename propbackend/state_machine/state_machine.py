@@ -31,12 +31,17 @@ class StateMachine:
         self.hardware_handler = hardware_handler
 
         self._state: State | None = None
+        self.active_run_logger = None
+        self.main_loop_logger = None
         self.time_keeper = TimeKeeper(name="StateMachineTimeKeeper", cycle_time=0.01, debug_time=60)
         self.transition_to(StartupState())
 
     
 
     def transition_to(self, state: State) -> str:
+        previous_state = self._state
+        previous_name = type(self._state).__name__ if self._state is not None else "None"
+        target_name = type(state).__name__
         if self._state is not None:
             transition_valid, reason = self._state.can_transition_to(state)
             if not transition_valid:
@@ -48,6 +53,21 @@ class StateMachine:
         self._state = state
         self._state.state_machine = self
         self._state.setup()
+
+        if self.active_run_logger is not None:
+            self.active_run_logger.log_event(
+                event_type="state_transition",
+                source="state_machine",
+                target=target_name,
+                message=f"{previous_name}->{target_name}",
+            )
+
+        # Keep run logger active through abort and close only once we return to Idle.
+        if isinstance(state, IdleState) and isinstance(previous_state, (HotfireState, EngineAbortState)):
+            if self.active_run_logger is not None:
+                self.active_run_logger.close()
+                self.active_run_logger = None
+
         self.time_keeper.statechange()
         backend_logger.debug(f"State {type(self._state).__name__} setup complete")
         return f"Transitioned to {type(self._state).__name__}"

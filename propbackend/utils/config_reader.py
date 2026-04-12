@@ -7,6 +7,7 @@ class _ConfigReaderSingleton:
     _config_json: dict = {}
     _board_config: dict = {}
     _state_defaults: dict = {}
+    _logging_config: dict = {}
 
     def __new__(cls):
         if cls._instance is None:
@@ -34,6 +35,8 @@ class _ConfigReaderSingleton:
         else:
             self._state_defaults = state_defaults
 
+        self._logging_config = self._config_json.get("logging", {})
+
     def reload_config(self) -> None:
         self._initialize_config()
 
@@ -60,6 +63,9 @@ class _ConfigReaderSingleton:
             backend_logger.error("State defaults configuration is empty. Please check the hardware_config.json file.")
             return []
         return list(self._state_defaults.keys())
+
+    def get_logging_config(self) -> dict:
+        return self._logging_config
 
 
 config_reader = _ConfigReaderSingleton()

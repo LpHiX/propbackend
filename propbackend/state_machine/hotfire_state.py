@@ -11,8 +11,13 @@ class HotfireState(State):
         self.name = "Hotfire"
         self.hotfire_controller = HotfireController()
 
-        self.hotfire_logger = BoardStateLogger("HotfireLog", self.state_machine.hardware_handler)
-        self.hotfire_logger.write_headers(self.state_machine.hardware_handler.boards)
+        if self.state_machine.active_run_logger is None:
+            self.state_machine.active_run_logger = BoardStateLogger(
+                "HotfireLog",
+                self.state_machine.hardware_handler,
+                auto_generate_report=True,
+            )
+            self.state_machine.active_run_logger.write_headers(self.state_machine.hardware_handler.boards)
 
     def loop(self) -> None:
         time_keeper = self.state_machine.time_keeper
@@ -35,12 +40,11 @@ class HotfireState(State):
                 #TODO SHOULD THIS TRIGGER AN ABORT?
                 # ----------------------------------
 
-        self.hotfire_logger.write_data(self.state_machine.hardware_handler.boards)
+        if self.state_machine.active_run_logger is not None:
+            self.state_machine.active_run_logger.write_data(self.state_machine.hardware_handler.boards)
         
         if self.hotfire_controller.is_hotfire_complete(time_statechange):
             backend_logger.info(f"Hotfire complete at T{T:.0f}s")
-            self.hotfire_logger.close()
-            
 
             from propbackend.state_machine.idle_state import IdleState
             self.state_machine.transition_to(IdleState())

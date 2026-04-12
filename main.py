@@ -33,14 +33,29 @@ async def main() -> None:
     #signal_handler.add_shutdown_task(lambda: debug_logger.info("Shutting down state machine..."))
 
 
-    main_loop_logger = BoardStateLogger("mainloop", hardware_handler)
-    main_loop_logger.write_headers(hardware_handler.boards)
+    state_machine.main_loop_logger = BoardStateLogger("mainloop", hardware_handler)
+    state_machine.main_loop_logger.write_headers(hardware_handler.boards)
+
+    def close_main_loop_logger() -> None:
+        if state_machine.main_loop_logger is not None:
+            state_machine.main_loop_logger.close()
+            state_machine.main_loop_logger = None
+
+    signal_handler.add_shutdown_task(close_main_loop_logger)
+
+    def close_active_run_logger() -> None:
+        if state_machine.active_run_logger is not None:
+            state_machine.active_run_logger.close()
+            state_machine.active_run_logger = None
+
+    signal_handler.add_shutdown_task(close_active_run_logger)
 
     try:
         while True:
             await state_machine.main_loop()
             if state_machine.time_keeper.get_cycle() % 10 == 0:
-                main_loop_logger.write_data(hardware_handler.boards)
+                if state_machine.main_loop_logger is not None:
+                    state_machine.main_loop_logger.write_data(hardware_handler.boards)
     except asyncio.CancelledError:
         # This will be reached when tasks are cancelled during shutdown
         backend_logger.info("Main loop cancelled, shutting down...")
@@ -48,6 +63,8 @@ async def main() -> None:
         # Fallback if the signal handler doesn't catch it
         backend_logger.info("KeyboardInterrupt caught in main(), shutting down...")
         signal_handler.handle_signal(signal.SIGINT, None)
+    finally:
+        close_main_loop_logger()
 
 if __name__ == "__main__":
     backend_logger.info("=====================Starting backend...======================")

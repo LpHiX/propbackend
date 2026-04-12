@@ -10,5 +10,7 @@
         "**/*.vscode": true
     },
     "python.analysis.typeCheckingMode": "standard",
-    "python.analysis.autoImportCompletions": false
+    "python.analysis.autoImportCompletions": false,
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "python-envs.defaultPackageManager": "ms-python.python:pip"
 }

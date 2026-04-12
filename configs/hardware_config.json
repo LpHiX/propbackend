@@ -96,5 +96,59 @@
         "tachos": {
             "rpm": null
         }
+    },
+    "logging": {
+        "schema_version": "1.1",
+        "units_by_state": {
+            "mv": "mV",
+            "temperature": "C",
+            "load": "N",
+            "rpm": "rpm",
+            "armed": "bool",
+            "powered": "bool",
+            "state": "state",
+            "angle": "deg",
+            "angle0": "deg",
+            "angle1": "deg",
+            "a_x": "m_s2",
+            "a_y": "m_s2",
+            "a_z": "m_s2",
+            "g_x": "deg_s",
+            "g_y": "deg_s",
+            "g_z": "deg_s",
+            "la": "deg",
+            "lo": "deg",
+            "alt": "m",
+            "m_x": "uT",
+            "m_y": "uT",
+            "m_z": "uT",
+            "v": "V",
+            "flowrate": "kg_s"
+        },
+        "groups_by_hw_type": {
+            "pts": "pressure",
+            "tcs": "temperature",
+            "imus": "inertial",
+            "gps": "inertial",
+            "mags": "inertial",
+            "baros": "inertial",
+            "servos": "actuators",
+            "solenoids": "actuators",
+            "pyros": "actuators",
+            "tvcs": "actuators",
+            "tachos": "rotational",
+            "lcs": "load",
+            "fms": "flow",
+            "voltage": "electrical"
+        },
+        "signal_type_by_hw_type": {
+            "servos": "actuator_actual",
+            "solenoids": "actuator_actual",
+            "pyros": "actuator_actual",
+            "tvcs": "actuator_actual"
+        },
+        "default_signal_type": "sensor",
+        "demand_signal_type": "actuator_demand",
+        "unknown_unit": "unknown"
     }
 }
