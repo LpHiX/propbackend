@@ -22,6 +22,7 @@ except ImportError:
     pg = None
 
 BaseWindow: type = cast(type, QtWidgets.QMainWindow) if QtWidgets is not None else object
+BaseWidget: type = cast(type, QtWidgets.QWidget) if QtWidgets is not None else object
 
 
 @dataclass(frozen=True)
@@ -34,11 +35,9 @@ class ChannelRecord:
     values: np.ndarray
 
 
-class H5ViewerWindow(BaseWindow):
+class H5FileTab(BaseWidget):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("BoardState H5 Viewer")
-        self.resize(1450, 900)
 
         self.current_file: Path | None = None
         self.channels: Dict[str, ChannelRecord] = {}
@@ -58,16 +57,14 @@ class H5ViewerWindow(BaseWindow):
             ]
         )
         self.channel_color: Dict[str, str] = {}
+        self.max_points_per_curve = 6000
         self._table_mutation = False
 
         self._build_ui()
-        self._build_menu()
         self._connect_signals()
 
     def _build_ui(self) -> None:
-        central = QtWidgets.QWidget()
-        self.setCentralWidget(central)
-        root = QtWidgets.QHBoxLayout(central)
+        root = QtWidgets.QHBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(8)
 
@@ -89,6 +86,10 @@ class H5ViewerWindow(BaseWindow):
         self.use_raw_checkbox = QtWidgets.QCheckBox("Use raw data when available")
         self.use_raw_checkbox.setChecked(False)
         left_layout.addWidget(self.use_raw_checkbox)
+
+        self.link_x_checkbox = QtWidgets.QCheckBox("Link X pan/zoom across unit plots")
+        self.link_x_checkbox.setChecked(True)
+        left_layout.addWidget(self.link_x_checkbox)
 
         self.channel_table = QtWidgets.QTableWidget(0, 5)
         self.channel_table.setHorizontalHeaderLabels(["Plot", "Channel", "Unit", "Signal", "Samples"])
@@ -125,45 +126,15 @@ class H5ViewerWindow(BaseWindow):
         self.plot_scroll.setWidget(self.plot_container)
         root.addWidget(self.plot_scroll, 1)
 
-    def _build_menu(self) -> None:
-        menu = self.menuBar()
-        file_menu = menu.addMenu("File")
-
-        open_action = QtGui.QAction("Open...", self)
-        open_action.setShortcut(QtGui.QKeySequence.Open)
-        open_action.triggered.connect(self._open_file_dialog)
-        file_menu.addAction(open_action)
-
-        close_action = QtGui.QAction("Close", self)
-        close_action.triggered.connect(self._close_current_file)
-        file_menu.addAction(close_action)
-
-        file_menu.addSeparator()
-
-        exit_action = QtGui.QAction("Exit", self)
-        exit_action.setShortcut(QtGui.QKeySequence.Quit)
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
-
     def _connect_signals(self) -> None:
         self.search_edit.textChanged.connect(self._apply_table_filter)
         self.channel_table.cellClicked.connect(self._on_table_clicked)
         self.channel_table.itemChanged.connect(self._on_table_item_changed)
         self.use_raw_checkbox.stateChanged.connect(self._reload_current_file_data)
+        self.link_x_checkbox.stateChanged.connect(self._relink_unit_plots)
         self.clear_button.clicked.connect(self._clear_all_channels)
 
-    def _open_file_dialog(self) -> None:
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self,
-            "Open BoardState H5 File",
-            str(Path.cwd()),
-            "HDF5 Files (*.h5 *.hdf5);;All Files (*)",
-        )
-        if not path:
-            return
-        self._load_file(Path(path))
-
-    def _load_file(self, path: Path) -> None:
+    def load_file(self, path: Path) -> None:
         try:
             self.channels = self._read_channels(path, use_raw=self.use_raw_checkbox.isChecked())
         except Exception as exc:
@@ -179,29 +150,16 @@ class H5ViewerWindow(BaseWindow):
 
         self.file_label.setText(f"Loaded: {path}")
         self._populate_channel_table()
-        self.statusBar().showMessage(f"Loaded {len(self.channels)} channels")
 
     def _reload_current_file_data(self) -> None:
         if self.current_file is None:
             return
         selected_before = set(self.selected_channels)
-        self._load_file(self.current_file)
+        self.load_file(self.current_file)
         for channel in selected_before:
             if channel in self.channels:
                 self._set_table_checked(channel, True)
                 self._set_channel_enabled(channel, True)
-
-    def _close_current_file(self) -> None:
-        self.current_file = None
-        self.channels.clear()
-        self.selected_channels.clear()
-        self.unit_plots.clear()
-        self.unit_curves.clear()
-        self.channel_color.clear()
-        self._clear_plot_widgets()
-        self.channel_table.setRowCount(0)
-        self.file_label.setText("No file loaded")
-        self.statusBar().clearMessage()
 
     def _read_channels(self, path: Path, use_raw: bool) -> Dict[str, ChannelRecord]:
         channels: Dict[str, ChannelRecord] = {}
@@ -346,22 +304,29 @@ class H5ViewerWindow(BaseWindow):
         plot.setLabel("left", f"Value ({unit})")
         plot.setLabel("bottom", "Time (s)")
 
-        if self.unit_plots:
-            first_plot = next(iter(self.unit_plots.values()))
-            plot.setXLink(first_plot)
-
         self.plot_layout.insertWidget(max(0, self.plot_layout.count() - 1), plot, 1)
         self.unit_plots[unit] = plot
         self.unit_curves[unit] = {}
+        self._relink_unit_plots()
 
     def _add_curve(self, channel: ChannelRecord) -> None:
         if channel.name not in self.channel_color:
             self.channel_color[channel.name] = next(self.color_cycle)
 
         plot = self.unit_plots[channel.unit]
+        x_values, y_values = self._downsample_for_display(channel.time, channel.values)
         pen = pg.mkPen(self.channel_color[channel.name], width=2)
-        curve = plot.plot(channel.time, channel.values, pen=pen, name=channel.name)
+        curve = plot.plot(x_values, y_values, pen=pen, name=channel.name)
+        curve.setClipToView(True)
+        curve.setDownsampling(auto=True, method="peak")
         self.unit_curves[channel.unit][channel.name] = curve
+
+    def _downsample_for_display(self, x_values: np.ndarray, y_values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        if len(x_values) <= self.max_points_per_curve:
+            return x_values, y_values
+
+        step = max(1, len(x_values) // self.max_points_per_curve)
+        return x_values[::step], y_values[::step]
 
     def _remove_curve(self, channel: ChannelRecord) -> None:
         curves = self.unit_curves.get(channel.unit, {})
@@ -377,6 +342,22 @@ class H5ViewerWindow(BaseWindow):
             self.unit_curves.pop(unit, None)
             self.plot_layout.removeWidget(plot)
             plot.deleteLater()
+        self._relink_unit_plots()
+
+    def _relink_unit_plots(self) -> None:
+        plots = list(self.unit_plots.values())
+        if not plots:
+            return
+
+        for plot in plots:
+            plot.setXLink(None)
+
+        if not self.link_x_checkbox.isChecked():
+            return
+
+        leader = plots[0]
+        for plot in plots[1:]:
+            plot.setXLink(leader)
 
     def _view_all_plots(self) -> None:
         for plot in self.unit_plots.values():
@@ -406,6 +387,165 @@ class H5ViewerWindow(BaseWindow):
                 widget.deleteLater()
 
 
+class H5ViewerWindow(BaseWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("BoardState H5 Viewer")
+        self.resize(1450, 900)
+
+        self.current_folder: Path | None = None
+
+        self._build_tabs()
+        self._build_menu()
+        self._connect_signals()
+
+    def _build_tabs(self) -> None:
+        self.tabs = QtWidgets.QTabWidget()
+        self.tabs.setTabsClosable(True)
+        self.tabs.setMovable(True)
+        self.setCentralWidget(self.tabs)
+
+        self.folder_tab = QtWidgets.QWidget()
+        folder_layout = QtWidgets.QVBoxLayout(self.folder_tab)
+        folder_layout.setContentsMargins(10, 10, 10, 10)
+        folder_layout.setSpacing(8)
+
+        top_row = QtWidgets.QHBoxLayout()
+        self.folder_label = QtWidgets.QLabel("No folder selected")
+        self.folder_label.setWordWrap(True)
+        self.open_folder_button = QtWidgets.QPushButton("Choose Folder...")
+        self.refresh_folder_button = QtWidgets.QPushButton("Refresh")
+        top_row.addWidget(self.folder_label, 1)
+        top_row.addWidget(self.open_folder_button)
+        top_row.addWidget(self.refresh_folder_button)
+        folder_layout.addLayout(top_row)
+
+        self.file_list = QtWidgets.QListWidget()
+        self.file_list.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        folder_layout.addWidget(self.file_list, 1)
+
+        open_row = QtWidgets.QHBoxLayout()
+        self.open_selected_button = QtWidgets.QPushButton("Open Selected File In New Tab")
+        open_row.addStretch(1)
+        open_row.addWidget(self.open_selected_button)
+        folder_layout.addLayout(open_row)
+
+        self.tabs.addTab(self.folder_tab, "Files")
+
+    def _build_menu(self) -> None:
+        menu = self.menuBar()
+        file_menu = menu.addMenu("File")
+
+        open_action = QtGui.QAction("Open H5...", self)
+        open_action.setShortcut(QtGui.QKeySequence.Open)
+        open_action.triggered.connect(self._open_file_dialog)
+        file_menu.addAction(open_action)
+
+        open_folder_action = QtGui.QAction("Open Folder...", self)
+        open_folder_action.triggered.connect(self._open_folder_dialog)
+        file_menu.addAction(open_folder_action)
+
+        close_action = QtGui.QAction("Close Current Tab", self)
+        close_action.triggered.connect(self._close_current_tab)
+        file_menu.addAction(close_action)
+
+        file_menu.addSeparator()
+
+        exit_action = QtGui.QAction("Exit", self)
+        exit_action.setShortcut(QtGui.QKeySequence.Quit)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
+    def _connect_signals(self) -> None:
+        self.open_folder_button.clicked.connect(self._open_folder_dialog)
+        self.refresh_folder_button.clicked.connect(self._refresh_folder_list)
+        self.open_selected_button.clicked.connect(self._open_selected_from_list)
+        self.file_list.itemDoubleClicked.connect(lambda _item: self._open_selected_from_list())
+        self.tabs.tabCloseRequested.connect(self._close_tab_by_index)
+
+    def _open_file_dialog(self) -> None:
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Open BoardState H5 File",
+            str(Path.cwd()),
+            "HDF5 Files (*.h5 *.hdf5);;All Files (*)",
+        )
+        if not path:
+            return
+        self._open_file_in_tab(Path(path))
+
+    def _open_folder_dialog(self) -> None:
+        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Choose H5 Folder", str(Path.cwd()))
+        if not folder:
+            return
+        self._set_folder(Path(folder))
+
+    def _set_folder(self, folder: Path) -> None:
+        self.current_folder = folder
+        self.folder_label.setText(str(folder))
+        self._refresh_folder_list()
+        self.tabs.setCurrentIndex(0)
+
+    def _refresh_folder_list(self) -> None:
+        self.file_list.clear()
+        if self.current_folder is None:
+            return
+
+        if not self.current_folder.exists() or not self.current_folder.is_dir():
+            self.statusBar().showMessage("Selected folder is not available")
+            return
+
+        files = list(self.current_folder.glob("*.h5")) + list(self.current_folder.glob("*.hdf5"))
+        files = sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
+
+        for path in files:
+            item = QtWidgets.QListWidgetItem(f"{path.name}    ({int(path.stat().st_size / 1024)} KiB)")
+            item.setData(QtCore.Qt.UserRole, str(path))
+            self.file_list.addItem(item)
+
+        self.statusBar().showMessage(f"Found {len(files)} H5 files in {self.current_folder}")
+
+    def _open_selected_from_list(self) -> None:
+        item = self.file_list.currentItem()
+        if item is None:
+            return
+        value = item.data(QtCore.Qt.UserRole)
+        if not isinstance(value, str):
+            return
+        self._open_file_in_tab(Path(value))
+
+    def _open_file_in_tab(self, path: Path) -> None:
+        existing_index = self._find_file_tab(path)
+        if existing_index is not None:
+            self.tabs.setCurrentIndex(existing_index)
+            return
+
+        tab = H5FileTab()
+        tab.load_file(path)
+        tab_index = self.tabs.addTab(tab, path.name)
+        self.tabs.setTabToolTip(tab_index, str(path))
+        self.tabs.setCurrentIndex(tab_index)
+        self.statusBar().showMessage(f"Opened {path}")
+
+    def _find_file_tab(self, path: Path) -> int | None:
+        for i in range(1, self.tabs.count()):
+            widget = self.tabs.widget(i)
+            if isinstance(widget, H5FileTab) and widget.current_file == path:
+                return i
+        return None
+
+    def _close_current_tab(self) -> None:
+        self._close_tab_by_index(self.tabs.currentIndex())
+
+    def _close_tab_by_index(self, index: int) -> None:
+        if index <= 0:
+            return
+        widget = self.tabs.widget(index)
+        self.tabs.removeTab(index)
+        if widget is not None:
+            widget.deleteLater()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="BoardStateLogger H5 interactive viewer")
     parser.add_argument("h5", nargs="?", help="Optional path to .h5 file")
@@ -417,7 +557,7 @@ def main() -> int:
         return 1
 
     app = QtWidgets.QApplication([])
-    pg.setConfigOptions(antialias=True, foreground="#d8dee9", background="#111217")
+    pg.setConfigOptions(antialias=False, foreground="#d8dee9", background="#111217")
 
     window = H5ViewerWindow()
     window.show()
@@ -425,7 +565,7 @@ def main() -> int:
     if args.h5:
         input_path = Path(args.h5)
         if input_path.exists():
-            window._load_file(input_path)
+            window._open_file_in_tab(input_path)
         else:
             QtWidgets.QMessageBox.warning(window, "Missing file", f"File does not exist:\n{input_path}")
 
