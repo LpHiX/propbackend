@@ -165,7 +165,7 @@ def make_plots(channels: Dict[str, Dict[str, np.ndarray]], output_dir: Path) -> 
 
     output_files = []
 
-    pressure_names = pick_channels(channels, ("pts_", "pt_"), plot_group="pressure")
+    pressure_names = pick_channels(channels, ("adc_", "pts_", "pt_"), plot_group="pressure")
     temperature_names = pick_channels(channels, ("tcs_", "tc_", "temp_", "temperature_"), plot_group="temperature")
     flowmeter_names = pick_channels(channels, ("fms_", "flow_", "flowmeter_"), plot_group="flow")
     actuator_pairs = build_actuator_pairs(channels)

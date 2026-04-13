@@ -57,8 +57,11 @@ class BoardStateLogger:
             for hw_type in config_reader.get_hardware_types():
                 if hw_type in board.board_config:
                     for item_name, item_data in board.board_config[hw_type].items():
-                        if item_data.get("adc"):
-                            comment_test += f"ADC_{hw_type}_{item_name}_gain:{item_data['gain']}_offset:{item_data['offset']} "
+                        if self._is_adc_item(hw_type) and isinstance(item_data, dict):
+                            gain = item_data.get('gain')
+                            offset = item_data.get('offset')
+                            if gain is not None or offset is not None:
+                                comment_test += f"ADC_{hw_type}_{item_name}_gain:{gain}_offset:{offset} "
 
         comment_test += "\n"
         self.current_csv.write(comment_test)
@@ -73,7 +76,7 @@ class BoardStateLogger:
         self.demand_signal_type = self.logging_config.get('demand_signal_type', 'actuator_demand')
         self.unknown_unit = self.logging_config.get('unknown_unit', 'unknown')
         self.status_state_names = set(self.logging_config.get('status_state_names', ['armed', 'powered', 'state']))
-        self.schema_version = self.logging_config.get('schema_version', '1.0')
+        self.schema_version = self.logging_config.get('schema_version', '1.2')
 
         self.channel_datasets: dict[str, dict[str, h5py.Dataset]] = {}
         self.channel_meta: dict[str, dict[str, str]] = {}
@@ -166,12 +169,13 @@ class BoardStateLogger:
     def _is_status_state(self, state_name: str) -> bool:
         return state_name in self.status_state_names
 
-    def _plot_group_for(self, hw_type: str, item_data: dict) -> str:
-        if isinstance(item_data, dict):
-            explicit = item_data.get('plot_group')
-            if isinstance(explicit, str) and explicit.strip():
-                return explicit.strip()
-        return self.groups_by_hw_type.get(hw_type, 'misc')
+    def _plot_group_for(self, hw_type: str, unit: str) -> str:
+        configured = self.groups_by_hw_type.get(hw_type)
+        if isinstance(configured, str) and configured.strip():
+            return configured.strip()
+        if isinstance(unit, str) and unit.strip():
+            return unit.strip().lower()
+        return 'misc'
 
     def _create_channel(self, channel_name: str, unit: str, signal_type: str, hw_type: str, is_adc: bool, plot_group: str) -> None:
         if channel_name in self.channel_datasets:
@@ -220,22 +224,22 @@ class BoardStateLogger:
             return float(value)
         return float('nan')
 
-    def _get_raw_value(self, item_data: dict, data_value):
-        if not isinstance(data_value, (int, float)):
-            return data_value
+    def _get_calibrated_value(self, item_data: dict, raw_value):
+        if not isinstance(raw_value, (int, float)):
+            return raw_value
 
         if not isinstance(item_data, dict):
-            return data_value
+            return raw_value
 
         gain = item_data.get('gain')
         offset = item_data.get('offset')
 
-        if isinstance(gain, (int, float)) and isinstance(offset, (int, float)) and gain != 0:
-            return (data_value - offset) / gain
-        return data_value
+        if isinstance(gain, (int, float)) and isinstance(offset, (int, float)):
+            return (raw_value - offset) * gain
+        return raw_value
 
-    def _is_adc_item(self, item_data: dict) -> bool:
-        return isinstance(item_data, dict) and bool(item_data.get('adc'))
+    def _is_adc_item(self, hw_type: str) -> bool:
+        return hw_type == 'adc'
 
     def _register_channel_metadata(self, board: Board, hw_type: str, item_name: str, state_name: str, channel_name: str, item_data: dict) -> None:
         if not isinstance(item_data, dict):
@@ -245,7 +249,7 @@ class BoardStateLogger:
         if not isinstance(source_channel, int):
             source_channel = None
 
-        if item_data.get('adc'):
+        if self._is_adc_item(hw_type):
             if self.h5_calibration is not None:
                 calibration_group = self.h5_calibration.require_group(channel_name)
                 if 'gain' in item_data:
@@ -311,8 +315,8 @@ class BoardStateLogger:
         channel_name = self._build_channel_name(board, hw_type, item_name, state_name, is_demand)
         unit = self._get_unit(item_data, state_name)
         signal_type = self._signal_type_for(hw_type, is_demand)
-        plot_group = self._plot_group_for(hw_type, item_data)
-        self._create_channel(channel_name, unit, signal_type, hw_type, self._is_adc_item(item_data), plot_group)
+        plot_group = self._plot_group_for(hw_type, unit)
+        self._create_channel(channel_name, unit, signal_type, hw_type, self._is_adc_item(hw_type), plot_group)
         self._register_channel_metadata(board, hw_type, item_name, state_name, channel_name, item_data)
         return channel_name
 
@@ -337,8 +341,9 @@ class BoardStateLogger:
         if is_demand or not is_adc:
             self._append_channel_sample(channel_name, t, float('nan'), value)
         else:
-            raw_value = self._get_raw_value(item_data, value)
-            self._append_channel_sample(channel_name, t, raw_value, value)
+            raw_value = value
+            calibrated_value = self._get_calibrated_value(item_data, raw_value)
+            self._append_channel_sample(channel_name, t, raw_value, calibrated_value)
 
     def _build_channel_specs(self, boards: list[Board]) -> list[ChannelSpec]:
         specs: list[ChannelSpec] = []
@@ -361,7 +366,7 @@ class BoardStateLogger:
                         channel_name=channel_name,
                         unit=self._get_unit(item_data, state_name),
                         signal_type=self._signal_type_for(hw_type, False),
-                        is_adc=self._is_adc_item(item_data),
+                        is_adc=self._is_adc_item(hw_type),
                     )
                 )
 

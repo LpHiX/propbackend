@@ -36,13 +36,12 @@
                 "port": "/dev/ttyAMA1",
                 "baudrate": 921600
             },
-            "pts": {
+            "adc": {
                 "0": {
                     "channel": 0,
-                    "adc": true,
                     "offset": 2574.3,
                     "gain": 0.045674,
-                    "plot_group": "current"
+                    "unit": "A"
                 }
             }
         },
@@ -81,7 +80,7 @@
             "angle0": null,
             "angle1": null
         },
-        "pts": {
+        "adc": {
             "mv": null
         },
         "tcs": {
@@ -150,7 +149,6 @@
             "flowrate": "kg_s"
         },
         "groups_by_hw_type": {
-            "pts": "pressure",
             "tcs": "temperature",
             "imus": "inertial",
             "gps": "inertial",
