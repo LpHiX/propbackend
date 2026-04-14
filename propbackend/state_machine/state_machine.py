@@ -1,6 +1,8 @@
 from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
+from datetime import datetime, timezone
+import time
 
 from propbackend.state_machine.base_state import State
 from propbackend.utils import backend_logger
@@ -38,6 +40,8 @@ class StateMachine:
         self.active_run_logger: BoardStateLogger | None = None
         self.active_run_time_offset: float | None = None
         self.main_loop_logger: BoardStateLogger | None = None
+        self.timer_t0_unix_ms: int = 0
+        self.timer_t0_mono_ms: int = 0
         self.time_keeper = TimeKeeper(name="StateMachineTimeKeeper", cycle_time=0.01, debug_time=60)
         self.transition_to(StartupState())
 
@@ -66,6 +70,13 @@ class StateMachine:
 
         if isinstance(state, HotfireState):
             self.active_run_time_offset = None
+            self._set_timer_payload_for_all(elapsed=True, reset_start=True)
+        elif isinstance(state, EngineAbortState):
+            self._set_timer_payload_for_all(elapsed=False, reset_start=False)
+        elif isinstance(state, IdleState):
+            self._set_timer_payload_for_all(elapsed=False, reset_start=False)
+        else:
+            self._set_timer_payload_for_all(elapsed=False, reset_start=False)
 
         if self.active_run_logger is not None:
             self.active_run_logger.log_event(
@@ -97,3 +108,16 @@ class StateMachine:
     def get_state(self) -> State:
         assert self._state is not None, "StateMachine has no state"
         return self._state
+
+    def _set_timer_payload_for_all(self, elapsed: bool, reset_start: bool) -> None:
+        if reset_start:
+            self.timer_t0_unix_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+            self.timer_t0_mono_ms = int(time.perf_counter() * 1000)
+
+        for board in self.hardware_handler.boards:
+            if "timer" not in board.board_config:
+                continue
+
+            board.desired_state["t0_unix_ms"] = self.timer_t0_unix_ms
+            board.desired_state["t0_mono_ms"] = self.timer_t0_mono_ms
+            board.desired_state["elapsed"] = elapsed

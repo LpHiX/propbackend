@@ -4,6 +4,7 @@ from propbackend.utils import backend_logger
 from propbackend.utils import config_reader
 import asyncio
 import json
+from datetime import datetime, timezone
 
 
 if TYPE_CHECKING:
@@ -31,13 +32,24 @@ class UDPCommandScheduler:
                         message[hw_type][item_name] = {"channel": item_data['channel']}
                         if "value" in item_data:
                             message[hw_type][item_name]["value"] = item_data["value"]                            
-            return message
+            return self._inject_timer_payload(message)
         else:
-            return {**self.board.desired_state}
+            return self._inject_timer_payload({**self.board.desired_state})
+
+    def _inject_timer_payload(self, message: dict) -> dict:
+        if "timer" not in self.board.board_config:
+            return message
+
+        message["utc_unix_ms"] = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+        message["t0_unix_ms"] = self.board.desired_state.get("t0_unix_ms", 0)
+        message["t0_mono_ms"] = self.board.desired_state.get("t0_mono_ms", 0)
+        message["elapsed"] = self.board.desired_state.get("elapsed", False)
+        return message
 
     async def start_sending(self):
         while self.running:
             self.timekeeper.cycle_start()
+            self.command = self.create_command()
             asyncio.create_task(self.udp_manager.send_receive(self.command))
             await self.timekeeper.cycle_end()
     
