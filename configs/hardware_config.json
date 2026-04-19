@@ -7,6 +7,7 @@
                 "port": "/dev/ttyAMA2",
                 "baudrate": 921600
             },
+            "timer": {},
             "servos": {
                 "Motor": {
                     "channel": 0,
@@ -37,10 +38,25 @@
                 "baudrate": 921600
             },
             "adc": {
-                "0": {
+                "rpm": {
                     "channel": 0,
-                    "offset": 2574.3,
-                    "gain": 0.045674,
+                    "adc": true,
+                    "offset": 0,
+                    "gain": 5,
+                    "unit": "rpm"
+                },
+                "torque": {
+                    "channel": 1,
+                    "adc": true,
+                    "offset": 0,
+                    "gain": 0.0002,
+                    "unit": "N_m"
+                },
+                "motor_current": {
+                    "channel": 7,
+                    "adc": true,
+                    "offset": 2561,
+                    "gain": -0.045674,
                     "unit": "A"
                 }
             }

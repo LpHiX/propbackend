@@ -1,4 +1,5 @@
 import argparse
+from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -13,6 +14,8 @@ except ImportError:  # pragma: no cover
 
 
 STATUS_SUFFIXES = ("_armed", "_armed_demand", "_powered", "_powered_demand", "_state", "_state_demand")
+
+MAX_CHANNELS_PER_PLOT = 12
 
 
 def is_status_channel(name: str) -> bool:
@@ -60,28 +63,6 @@ def load_channels(h5: h5py.File) -> Dict[str, Dict[str, np.ndarray]]:
     return channels
 
 
-def pick_channels(channels: Dict[str, Dict[str, np.ndarray]], prefixes: Tuple[str, ...], include_demands: bool = False, plot_group: str | None = None) -> List[str]:
-    names = []
-    for name, payload in channels.items():
-        if is_status_channel(name):
-            continue
-        if not include_demands and payload["signal_type"] == "actuator_demand":
-            continue
-        tagged_group = payload.get("plot_group", "")
-        if plot_group is not None:
-            if tagged_group:
-                if tagged_group != plot_group:
-                    continue
-            else:
-                if not name.startswith(prefixes):
-                    continue
-        else:
-            if not name.startswith(prefixes):
-                continue
-        names.append(name)
-    return sorted(names)
-
-
 def summarize_channels(channels: Dict[str, Dict[str, np.ndarray]]) -> List[str]:
     lines = []
     lines.append(f"Channels discovered: {len(channels)}")
@@ -89,12 +70,24 @@ def summarize_channels(channels: Dict[str, Dict[str, np.ndarray]]) -> List[str]:
 
     mismatched = []
     nan_heavy = []
-    raw_populated_non_adc = []
+    raw_populated_non_sensor = []
+    signal_type_counter: Counter[str] = Counter()
+    plot_group_counter: Counter[str] = Counter()
+    sensor_unit_counter: Counter[str] = Counter()
 
     for name, payload in channels.items():
         t_len = len(payload["time"])
         r_len = len(payload["raw"])
         d_len = len(payload["data"])
+        signal_type = str(payload.get("signal_type", "") or "<missing>")
+        plot_group = str(payload.get("plot_group", "") or "<missing>")
+
+        signal_type_counter[signal_type] += 1
+        plot_group_counter[plot_group] += 1
+        if signal_type == "sensor":
+            unit_key = str(payload.get("unit", "") or "<missing>")
+            sensor_unit_counter[unit_key] += 1
+
         if not (t_len == r_len == d_len):
             mismatched.append((name, t_len, r_len, d_len))
 
@@ -106,7 +99,7 @@ def summarize_channels(channels: Dict[str, Dict[str, np.ndarray]]) -> List[str]:
         if payload.get("signal_type") != "sensor" and d_len > 0:
             raw = payload["raw"]
             if np.isfinite(raw).any():
-                raw_populated_non_adc.append(name)
+                raw_populated_non_sensor.append(name)
 
     lines.append(f"Channels with length mismatch: {len(mismatched)}")
     for name, t_len, r_len, d_len in mismatched[:10]:
@@ -116,9 +109,21 @@ def summarize_channels(channels: Dict[str, Dict[str, np.ndarray]]) -> List[str]:
     for name, ratio in sorted(nan_heavy, key=lambda x: x[1], reverse=True)[:10]:
         lines.append(f"  - {name}: nan_ratio={ratio:.2f}")
 
-    lines.append(f"Non-sensor channels with finite raw values: {len(raw_populated_non_adc)}")
-    for name in raw_populated_non_adc[:10]:
+    lines.append(f"Non-sensor channels with finite raw values: {len(raw_populated_non_sensor)}")
+    for name in raw_populated_non_sensor[:10]:
         lines.append(f"  - {name}")
+
+    lines.append("Signal type counts:")
+    for key, count in signal_type_counter.most_common():
+        lines.append(f"  - {key}: {count}")
+
+    lines.append("Plot group counts:")
+    for key, count in plot_group_counter.most_common():
+        lines.append(f"  - {key}: {count}")
+
+    lines.append("Sensor unit counts:")
+    for key, count in sensor_unit_counter.most_common():
+        lines.append(f"  - {key}: {count}")
 
     return lines
 
@@ -144,19 +149,53 @@ def build_actuator_pairs(channels: Dict[str, Dict[str, np.ndarray]]) -> List[Tup
 
 
 def plot_channel_set(ax, channels: Dict[str, Dict[str, np.ndarray]], names: List[str], title: str) -> None:
+    plotted = 0
     for name in names:
         if name not in channels:
             continue
         x = channels[name]["time"]
         y = channels[name]["data"]
-        if len(x) == 0:
+        n = min(len(x), len(y))
+        if n == 0:
             continue
-        ax.plot(x, y, label=name, linewidth=1.3)
+        ax.plot(x[:n], y[:n], label=name, linewidth=1.3)
+        plotted += 1
     ax.set_title(title)
     ax.set_xlabel("time_s")
     ax.grid(alpha=0.25)
-    if names:
+    if plotted:
         ax.legend(fontsize=8, ncols=2)
+
+
+def filename_safe_token(text: str) -> str:
+    out = []
+    for ch in text.strip().lower():
+        if ch.isalnum():
+            out.append(ch)
+        else:
+            out.append("_")
+    token = "".join(out).strip("_")
+    while "__" in token:
+        token = token.replace("__", "_")
+    return token or "unitless"
+
+
+def group_sensor_channels_by_unit(channels: Dict[str, Dict[str, np.ndarray]]) -> List[Tuple[str, List[str]]]:
+    groups: Dict[str, List[str]] = {}
+    for name, payload in channels.items():
+        if is_status_channel(name):
+            continue
+        if payload.get("signal_type") != "sensor":
+            continue
+        unit = str(payload.get("unit", "") or "unitless")
+        groups.setdefault(unit, []).append(name)
+
+    grouped = []
+    for unit, names in groups.items():
+        grouped.append((unit, sorted(names)))
+
+    grouped.sort(key=lambda x: x[0].lower())
+    return grouped
 
 
 def make_plots(channels: Dict[str, Dict[str, np.ndarray]], output_dir: Path) -> List[Path]:
@@ -165,45 +204,28 @@ def make_plots(channels: Dict[str, Dict[str, np.ndarray]], output_dir: Path) -> 
 
     output_files = []
 
-    pressure_names = pick_channels(channels, ("adc_", "pts_", "pt_"), plot_group="pressure")
-    temperature_names = pick_channels(channels, ("tcs_", "tc_", "temp_", "temperature_"), plot_group="temperature")
-    flowmeter_names = pick_channels(channels, ("fms_", "flow_", "flowmeter_"), plot_group="flow")
+    sensor_groups = group_sensor_channels_by_unit(channels)
     actuator_pairs = build_actuator_pairs(channels)
+    plot_index = 1
 
-    if pressure_names:
-        pressure_plot_path = output_dir / "01_pressure_channels.png"
+    for unit, names in sensor_groups:
+        unit_token = filename_safe_token(unit)
+        sensor_plot_path = output_dir / f"{plot_index:02d}_sensor_unit_{unit_token}.png"
         fig, ax = plt.subplots(figsize=(12, 4.5))
-        plot_channel_set(ax, channels, pressure_names[:12], "Pressure channels")
+        plot_channel_set(ax, channels, names[:MAX_CHANNELS_PER_PLOT], f"Sensor channels (unit: {unit})")
         fig.tight_layout()
-        fig.savefig(pressure_plot_path, dpi=140)
+        fig.savefig(sensor_plot_path, dpi=140)
         plt.close(fig)
-        output_files.append(pressure_plot_path)
-
-    if temperature_names:
-        temperature_plot_path = output_dir / "02_temperature_channels.png"
-        fig, ax = plt.subplots(figsize=(12, 4.5))
-        plot_channel_set(ax, channels, temperature_names[:12], "Temperature channels")
-        fig.tight_layout()
-        fig.savefig(temperature_plot_path, dpi=140)
-        plt.close(fig)
-        output_files.append(temperature_plot_path)
-
-    if flowmeter_names:
-        flowmeter_plot_path = output_dir / "03_flowmeter_channels.png"
-        fig, ax = plt.subplots(figsize=(12, 4.5))
-        plot_channel_set(ax, channels, flowmeter_names[:12], "Flowmeter channels")
-        fig.tight_layout()
-        fig.savefig(flowmeter_plot_path, dpi=140)
-        plt.close(fig)
-        output_files.append(flowmeter_plot_path)
+        output_files.append(sensor_plot_path)
+        plot_index += 1
 
     servo_pairs = [(demand, actual) for demand, actual in actuator_pairs if demand.startswith("servos_")]
     solenoid_pairs = [(demand, actual) for demand, actual in actuator_pairs if demand.startswith("solenoids_")]
 
     if servo_pairs:
-        servo_plot_path = output_dir / "04_servos_demand_vs_actual.png"
+        servo_plot_path = output_dir / f"{plot_index:02d}_servos_demand_vs_actual.png"
         fig, ax = plt.subplots(figsize=(12, 5.0))
-        for demand_name, actual_name in servo_pairs[:12]:
+        for demand_name, actual_name in servo_pairs[:MAX_CHANNELS_PER_PLOT]:
             d = channels[demand_name]
             a = channels[actual_name]
             if len(d["time"]) > 0:
@@ -218,11 +240,12 @@ def make_plots(channels: Dict[str, Dict[str, np.ndarray]], output_dir: Path) -> 
         fig.savefig(servo_plot_path, dpi=140)
         plt.close(fig)
         output_files.append(servo_plot_path)
+        plot_index += 1
 
     if solenoid_pairs:
-        solenoid_plot_path = output_dir / "05_solenoids_demand_vs_actual.png"
+        solenoid_plot_path = output_dir / f"{plot_index:02d}_solenoids_demand_vs_actual.png"
         fig, ax = plt.subplots(figsize=(12, 5.0))
-        for demand_name, actual_name in solenoid_pairs[:12]:
+        for demand_name, actual_name in solenoid_pairs[:MAX_CHANNELS_PER_PLOT]:
             d = channels[demand_name]
             a = channels[actual_name]
             if len(d["time"]) > 0:
@@ -239,6 +262,11 @@ def make_plots(channels: Dict[str, Dict[str, np.ndarray]], output_dir: Path) -> 
         output_files.append(solenoid_plot_path)
 
     return output_files
+
+
+def clear_old_plots(output_dir: Path) -> None:
+    for png_path in output_dir.glob("*.png"):
+        png_path.unlink(missing_ok=True)
 
 
 def write_summary(output_dir: Path, summary_lines: List[str], actuator_pairs: List[Tuple[str, str]], plots: List[Path]) -> Path:
@@ -277,6 +305,7 @@ def generate_run_report(h5_path: str | Path, output_dir: str | Path | None = Non
         plots: List[Path] = []
 
         if include_plots:
+            clear_old_plots(output_dir_path)
             plots = make_plots(channels, output_dir_path)
 
         summary_path = write_summary(output_dir_path, summary_lines, actuator_pairs, plots)

@@ -70,7 +70,12 @@ class StateMachine:
 
         if isinstance(state, HotfireState):
             self.active_run_time_offset = None
-            self._set_timer_payload_for_all(elapsed=True, reset_start=True)
+            hotfire_start_delay_s = float(state.hotfire_controller.time_before_ignition)
+            self._set_timer_payload_for_all(
+                elapsed=True,
+                reset_start=True,
+                start_offset_ms=int(hotfire_start_delay_s * 1000),
+            )
         elif isinstance(state, EngineAbortState):
             self._set_timer_payload_for_all(elapsed=False, reset_start=False)
         elif isinstance(state, IdleState):
@@ -109,10 +114,11 @@ class StateMachine:
         assert self._state is not None, "StateMachine has no state"
         return self._state
 
-    def _set_timer_payload_for_all(self, elapsed: bool, reset_start: bool) -> None:
+    def _set_timer_payload_for_all(self, elapsed: bool, reset_start: bool, start_offset_ms: int = 0) -> None:
         if reset_start:
-            self.timer_t0_unix_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
-            self.timer_t0_mono_ms = int(time.perf_counter() * 1000)
+            # Positive offset pushes t0 into the future so board-side elapsed can count negative pre-ignition.
+            self.timer_t0_unix_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000) + start_offset_ms
+            self.timer_t0_mono_ms = int(time.perf_counter() * 1000) + start_offset_ms
 
         for board in self.hardware_handler.boards:
             if "timer" not in board.board_config:

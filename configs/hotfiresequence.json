@@ -41,7 +41,7 @@
                 "servos": {
                     "Motor": {
                         "armed": true,
-                        "angle": 20
+                        "angle": 25
                     },
                     "PumpInlet": {
                         "armed": true,
@@ -51,12 +51,12 @@
                 }
             }
         },
-        "2": {
+        "5": {
             "ActuatorBoard": {
                 "servos": {
                     "Motor": {
                         "armed": true,
-                        "angle": 0,
+                        "angle": 35,
                         "ramp_to_next": true
                     },
                     "PumpInlet": {
@@ -67,12 +67,12 @@
                 }
             }
         },
-        "3": {
+        "10": {
             "ActuatorBoard": {
                 "servos": {
                     "Motor": {
                         "armed": true,
-                        "angle": 180
+                        "angle": 0
                     },
                     "PumpInlet": {
                         "armed": true,
