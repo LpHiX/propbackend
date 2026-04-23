@@ -7,18 +7,10 @@
                 "Motor": {
                     "armed": true,
                     "angle": 0
-                },
-                "PumpInlet": {
-                    "armed": true,
-                    "angle": 0
                 }
             },
             "solenoids": {
                 "rl": {
-                    "armed": false,
-                    "powered": false
-                },
-                "sl": {
                     "armed": false,
                     "powered": false
                 }
@@ -42,41 +34,16 @@
                     "Motor": {
                         "armed": true,
                         "angle": 25
-                    },
-                    "PumpInlet": {
-                        "armed": true,
-                        "angle": 180,
-                        "ramp_to_next": true
                     }
                 }
             }
         },
-        "5": {
+        "120": {
             "ActuatorBoard": {
-                "servos": {
-                    "Motor": {
-                        "armed": true,
-                        "angle": 35,
-                        "ramp_to_next": true
-                    },
-                    "PumpInlet": {
-                        "armed": true,
-                        "angle": 180,
-                        "ramp_to_next": true
-                    }
-                }
-            }
-        },
-        "10": {
-            "ActuatorBoard": {
-                "servos": {
-                    "Motor": {
-                        "armed": true,
-                        "angle": 0
-                    },
-                    "PumpInlet": {
-                        "armed": true,
-                        "angle": 0
+                "solenoids": {
+                    "rl": {
+                        "armed": false,
+                        "powered": false
                     }
                 }
             }

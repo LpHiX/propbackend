@@ -39,14 +39,14 @@
             },
             "adc": {
                 "rpm": {
-                    "channel": 0,
+                    "channel": 6,
                     "adc": true,
                     "offset": 0,
                     "gain": 5,
                     "unit": "rpm"
                 },
                 "torque": {
-                    "channel": 1,
+                    "channel": 5,
                     "adc": true,
                     "offset": 0,
                     "gain": 0.0002,
@@ -58,6 +58,27 @@
                     "offset": 2561,
                     "gain": -0.045674,
                     "unit": "A"
+                },
+                "pt_in": {
+                    "channel": 2,
+                    "adc": true,
+                    "offset": 481,
+                    "gain": 0.017241379,
+                    "unit": "bar"
+                },
+                "pt_out": {
+                    "channel": 3,
+                    "adc": true,
+                    "offset": 546,
+                    "gain": 0.017241379,
+                    "unit": "bar"
+                },
+                "pt_post": {
+                    "channel": 4,
+                    "adc": true,
+                    "offset": 440.5,
+                    "gain": 0.0275862,
+                    "unit": "bar"
                 }
             }
         },
