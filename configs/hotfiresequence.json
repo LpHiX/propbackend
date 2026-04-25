@@ -1,7 +1,7 @@
 {
-    "notes": "Simply testing the notes work",
+    "notes": "Testing if notes work, 2",
     "time_before_ignition": 4,
-    "hotfire_safing_time": 1,
+    "hotfire_safing_time": 4,
     "start_end_desiredstate": {
         "ActuatorBoard": {
             "servos": {
@@ -24,7 +24,7 @@
                 }
             }
         },
-        "180": {
+        "5": {
             "ActuatorBoard": {
                 "servos": {
                     "PumpOutlet": {

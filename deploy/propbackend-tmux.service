@@ -1,0 +1,18 @@
+[Unit]
+Description=Propbackend in tmux
+Wants=network-online.target
+After=network-online.target local-fs.target
+RequiresMountsFor=/mnt/proppi_data
+
+[Service]
+Type=oneshot
+User=martin
+WorkingDirectory=/home/martin/propbackend
+ConditionPathIsMountPoint=/mnt/proppi_data
+ExecStartPre=/bin/sleep 5
+ExecStart=/home/martin/propbackend/scripts/start_tmux_backend.sh
+ExecStop=/usr/bin/tmux kill-session -t propbackend
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -2,7 +2,7 @@
     "boards": {
         "ActuatorBoard": {
             "is_actuator": true,
-            "polling_interval": 0.02,
+            "polling_interval": 0.05,
             "serial": {
                 "port": "/dev/ttyAMA2",
                 "baudrate": 921600
@@ -11,15 +11,18 @@
             "servos": {
                 "Motor": {
                     "channel": 0,
-                    "disarm_angle": 0
+                    "disarm_angle": 0,
+                    "unit": "deg"
                 },
                 "PumpOutlet": {
                     "channel": 1,
-                    "disarm_angle": 0
+                    "disarm_angle": 0,
+                    "unit": "deg"
                 },
                 "PumpInlet": {
                     "channel": 2,
-                    "disarm_angle": 0
+                    "disarm_angle": 0,
+                    "unit": "deg"
                 }
             },
             "solenoids": {
@@ -96,7 +99,7 @@
             }
         },
         "ThermoBoard": {
-            "polling_interval": 0.02,
+            "polling_interval": 0.05,
             "serial": {
                 "port": "/dev/ttyAMA1",
                 "baudrate": 921600

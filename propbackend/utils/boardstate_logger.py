@@ -95,9 +95,9 @@ class BoardStateLogger:
 
     def _init_config_groups(self) -> None:
         string_dt = h5py.string_dtype(encoding='utf-8')
+        self.h5_config.create_dataset('notes', data=self.notes, dtype=string_dt)
         self.h5_config.create_dataset('schema_version', data=self.schema_version, dtype=string_dt)
         self.h5_config.create_dataset('hardware_json', data=json.dumps(config_reader.get_config()), dtype=string_dt)
-        self.h5_config.create_dataset('notes', data=self.notes, dtype=string_dt)
         self.h5_calibration = self.h5_config.create_group('calibration')
         self.h5_channel_units = self.h5_config.create_group('channel_units')
 
@@ -185,9 +185,16 @@ class BoardStateLogger:
         if self.h5_channel_units is not None:
             self.h5_channel_units.attrs[channel_name] = unit
 
-    def _get_unit(self, item_data: dict, state_name: str) -> str:
+    def _get_unit(self, board: Board, hw_type: str, item_name: str, item_data: dict) -> str:
         if isinstance(item_data, dict) and 'unit' in item_data and item_data['unit'] is not None:
             return str(item_data['unit'])
+
+        board_bucket = board.board_config.get(hw_type)
+        if isinstance(board_bucket, dict):
+            board_item = board_bucket.get(item_name)
+            if isinstance(board_item, dict) and board_item.get('unit') is not None:
+                return str(board_item['unit'])
+
         return ''
 
     def _to_numeric_or_nan(self, value):
@@ -290,7 +297,7 @@ class BoardStateLogger:
 
     def _register_entry_channel(self, board: Board, hw_type: str, item_name: str, item_data: dict, state_name: str, is_demand: bool) -> str:
         channel_name = self._build_channel_name(board, hw_type, item_name, state_name, is_demand)
-        unit = self._get_unit(item_data, state_name)
+        unit = self._get_unit(board, hw_type, item_name, item_data)
         signal_type = self._signal_type_for(hw_type, is_demand)
         plot_group = self._plot_group_for(hw_type, unit)
         self._create_channel(channel_name, unit, signal_type, hw_type, self._is_adc_item(hw_type), plot_group)
@@ -307,7 +314,7 @@ class BoardStateLogger:
             state_name=state_name,
             is_demand=is_demand,
             channel_name=status_name,
-            unit=self._get_unit(item_data, state_name),
+            unit=self._get_unit(board, hw_type, item_name, item_data),
             signal_type='status',
             is_adc=False,
         )
@@ -341,7 +348,7 @@ class BoardStateLogger:
                         state_name=state_name,
                         is_demand=False,
                         channel_name=channel_name,
-                        unit=self._get_unit(item_data, state_name),
+                        unit=self._get_unit(board, hw_type, item_name, item_data),
                         signal_type=self._signal_type_for(hw_type, False),
                         is_adc=self._is_adc_item(hw_type),
                     )
@@ -362,7 +369,7 @@ class BoardStateLogger:
                         state_name=state_name,
                         is_demand=True,
                         channel_name=channel_name,
-                        unit=self._get_unit(item_data, state_name),
+                        unit=self._get_unit(board, hw_type, item_name, item_data),
                         signal_type=self._signal_type_for(hw_type, True),
                         is_adc=False,
                     )

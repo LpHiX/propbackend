@@ -2,6 +2,7 @@ from typing import Optional, TYPE_CHECKING, cast
 import json
 import asyncio
 from datetime import datetime
+import subprocess
 
 from propbackend.state_machine.hotfire_state import HotfireState
 from propbackend.state_machine.engine_abort_state import EngineAbortState
@@ -28,14 +29,9 @@ class CommandProcessor:
         self._hardware_handler = hardware_handler
         self.commands = {
             "get hardware json": self.get_hardware_json,
-            # "set hardware json": self.set_hardware_json,
             "reload hardware json": self.reload_hardware_json,
-            # "send receive": self.send_receive,
             "get state": self.get_state,
             "update desired state": self.update_desired_state,
-            # "disarm all": self.disarm_all,
-            # "get hotfire sequence": self.get_hotfire_sequences,
-            # "set hotfire sequence": self.set_hotfire_sequences,
             "start hotfire sequence": self.start_hotfire_sequence,
             "abort engine": self.abort_engine,
             "fts": self.fts,
@@ -43,6 +39,8 @@ class CommandProcessor:
             "get boards desired states": self.get_boards_desired_states,
             "get time": self.get_time,
             "return to idle": self.return_to_idle,
+            "shutdown pi": self.shutdown_pi,
+            "reboot pi": self.reboot_pi
         }
     
     @property
@@ -213,3 +211,25 @@ class CommandProcessor:
         print("fts not implemented")
         return "fts not implemented"
         
+    def shutdown_pi(self, _):
+        backend_logger.info("Starting shutdown sequence: stopping tmux, syncing, power off...")
+        
+        # The sequence of commands to run:
+        # 1. sleep 1        -> Wait a moment so the Python reply reaches the UI
+        # 2. tmux kill-server -> Shuts down your mainloop so the log file closes
+        # 3. sleep 12       -> Give Syncthing 12 seconds to sync the closed file
+        # 4. sudo shutdown  -> Power off the Pi
+        seq = "sleep 1 && tmux kill-server && sleep 12 && sudo shutdown -h now"
+        
+        # We use 'nohup' and '&' so this sequence detaches and survives even after tmux dies!
+        subprocess.Popen(f"nohup bash -c '{seq}' >/dev/null 2>&1 &", shell=True)
+        
+        return self.reply_str("shutdown pi", "Stopping loop and syncing logs... Pi will power off in 15s")
+
+    def reboot_pi(self, _):
+        backend_logger.info("Starting reboot sequence...")
+        
+        seq = "sleep 1 && tmux kill-server && sleep 12 && sudo reboot"
+        subprocess.Popen(f"nohup bash -c '{seq}' >/dev/null 2>&1 &", shell=True)
+        
+        return self.reply_str("reboot pi", "Stopping loop and syncing logs... Pi will reboot in 15s")

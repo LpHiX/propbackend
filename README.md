@@ -8,6 +8,55 @@ source venv/bin/activate
 python main.py
 ```
 
+# Autostart in tmux at boot
+If you want the backend to auto-start on boot and remain attachable over SSH:
+
+This setup is strict: backend will NOT start unless `/mnt/proppi_data` is mounted.
+
+One-time setup:
+```
+cd ~/propbackend
+chmod +x start scripts/start_tmux_backend.sh
+sudo apt update
+sudo apt install -y tmux
+sudo cp deploy/propbackend-tmux.service /etc/systemd/system/propbackend-tmux.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now propbackend-tmux.service
+```
+
+Recommended for delayed USB readiness at boot (keep boot alive, but gate backend start on mount):
+1. Edit `/etc/fstab`.
+```
+sudo nano /etc/fstab
+```
+2. Use this entry for the data disk.
+```
+UUID=3cfcaf06-1f4a-4777-bd37-60099bb45de7 /mnt/proppi_data ext4 defaults,nofail,x-systemd.automount,x-systemd.device-timeout=45 0 0
+```
+3. Reload and test.
+```
+sudo systemctl daemon-reload
+sudo mount -a
+systemctl status mnt-proppi_data.mount
+systemctl status propbackend-tmux.service
+```
+
+Notes:
+- `x-systemd.automount` lets systemd bring the mount up when first needed (helpful when USB enumerates late).
+- `x-systemd.device-timeout=45` gives the USB device extra time to appear.
+- `nofail` allows the Pi to complete boot for SSH recovery, while the service file still prevents backend startup unless mount is present.
+
+Useful commands:
+```
+systemctl status propbackend-tmux.service
+tmux ls
+tmux attach -t propbackend
+sudo systemctl restart propbackend-tmux.service
+sudo systemctl stop propbackend-tmux.service
+```
+
+Detach from tmux without stopping backend: press `Ctrl+b`, then `d`.
+
 # Python setup
 ```
 cd ~/propbackend
