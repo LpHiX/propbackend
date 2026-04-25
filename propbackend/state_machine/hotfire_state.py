@@ -15,7 +15,7 @@ class HotfireState(State):
             self.state_machine.active_run_logger = BoardStateLogger(
                 "HotfireLog",
                 self.state_machine.hardware_handler,
-                auto_generate_report=True,
+                notes=self.hotfire_controller.get_notes(),
             )
             self.state_machine.active_run_logger.write_headers(self.state_machine.hardware_handler.boards)
 

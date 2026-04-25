@@ -7,6 +7,8 @@ class HotfireController():
         with open('configs/hotfiresequence.json', 'r') as file:
             sequencejson = json.load(file)
 
+        sequencejson.setdefault("notes", "")
+
         self.set_hotfire_sequence(sequencejson)
 
         with open('configs/hotfiresequence.json', 'w') as file:
@@ -20,6 +22,7 @@ class HotfireController():
         self.time_before_ignition = self.sequencejson["time_before_ignition"]
         self.hotfire_safing_time = self.sequencejson["hotfire_safing_time"]
         self.start_end_desiredstate = self.sequencejson["start_end_desiredstate"]
+        self.notes = str(self.sequencejson.get("notes", ""))
         sequence = self.sequencejson["sequence"]
         times = []
         timestrs = []
@@ -47,6 +50,9 @@ class HotfireController():
 
     def get_hotfire_sequence(self):
         return self.sequencejson
+
+    def get_notes(self):
+        return self.notes
     
     def get_hotfire_desiredstate(self, time_since_statechange):
         T = self.get_T(time_since_statechange)

@@ -1,49 +1,35 @@
 {
+    "notes": "Simply testing the notes work",
     "time_before_ignition": 4,
     "hotfire_safing_time": 1,
     "start_end_desiredstate": {
         "ActuatorBoard": {
             "servos": {
-                "Motor": {
+                "PumpOutlet": {
                     "armed": true,
                     "angle": 0
-                }
-            },
-            "solenoids": {
-                "rl": {
-                    "armed": false,
-                    "powered": false
                 }
             }
         }
     },
     "sequence": {
-        "-3": {
-            "ActuatorBoard": {
-                "solenoids": {
-                    "rl": {
-                        "armed": true,
-                        "powered": true
-                    }
-                }
-            }
-        },
         "0": {
             "ActuatorBoard": {
                 "servos": {
-                    "Motor": {
+                    "PumpOutlet": {
                         "armed": true,
-                        "angle": 25
+                        "angle": 0,
+                        "ramp_to_next": true
                     }
                 }
             }
         },
-        "120": {
+        "180": {
             "ActuatorBoard": {
-                "solenoids": {
-                    "rl": {
-                        "armed": false,
-                        "powered": false
+                "servos": {
+                    "PumpOutlet": {
+                        "armed": true,
+                        "angle": 180
                     }
                 }
             }

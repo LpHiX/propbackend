@@ -28,11 +28,13 @@ class ChannelSpec:
 
 
 class BoardStateLogger:
-    def __init__(self, name, hardware_handler: HardwareHandler, log_dir="/mnt/proppi_data/logs", auto_generate_report: bool = False):
+    ACTUATOR_HW_TYPES = {"servos", "solenoids", "pyros", "tvcs"}
+
+    def __init__(self, name, hardware_handler: HardwareHandler, log_dir="/mnt/proppi_data/logs", notes: str | None = None):
         self.name = name
         self.base_log_dir = log_dir
         self.hardware_handler = hardware_handler
-        self.auto_generate_report = auto_generate_report
+        self.notes = notes or ""
 
         self.log_date = datetime.now().strftime('%Y-%m-%d')
         logger_folder = ''.join(ch.lower() if ch.isalnum() else '_' for ch in self.name).strip('_') or 'logger'
@@ -69,14 +71,8 @@ class BoardStateLogger:
 
         self.state_defaults = config_reader.get_state_defaults()
         self.logging_config = config_reader.get_logging_config()
-        self.units_by_state = self.logging_config.get('units_by_state', {})
-        self.groups_by_hw_type = self.logging_config.get('groups_by_hw_type', {})
-        self.signal_type_by_hw_type = self.logging_config.get('signal_type_by_hw_type', {})
-        self.default_signal_type = self.logging_config.get('default_signal_type', 'sensor')
-        self.demand_signal_type = self.logging_config.get('demand_signal_type', 'actuator_demand')
-        self.unknown_unit = self.logging_config.get('unknown_unit', 'unknown')
-        self.status_state_names = set(self.logging_config.get('status_state_names', ['armed', 'powered', 'state']))
         self.schema_version = self.logging_config.get('schema_version', '1.2')
+        self.status_state_names = {'armed', 'powered', 'state'}
 
         self.channel_datasets: dict[str, dict[str, h5py.Dataset]] = {}
         self.channel_meta: dict[str, dict[str, str]] = {}
@@ -97,26 +93,11 @@ class BoardStateLogger:
 
         self._init_config_groups()
 
-    def _generate_report(self) -> None:
-        if not self.auto_generate_report:
-            return
-
-        try:
-            from propbackend.utils.h5_run_diagnostics import generate_run_report
-
-            reports_dir = os.path.join(self.base_log_dir, self.log_date, 'reports')
-            generate_run_report(
-                h5_path=self.h5_path,
-                output_dir=reports_dir,
-                include_plots=True,
-            )
-        except Exception as exc:
-            print(f"BoardStateLogger: report generation failed for {self.h5_file_name}: {exc}")
-
     def _init_config_groups(self) -> None:
         string_dt = h5py.string_dtype(encoding='utf-8')
         self.h5_config.create_dataset('schema_version', data=self.schema_version, dtype=string_dt)
         self.h5_config.create_dataset('hardware_json', data=json.dumps(config_reader.get_config()), dtype=string_dt)
+        self.h5_config.create_dataset('notes', data=self.notes, dtype=string_dt)
         self.h5_calibration = self.h5_config.create_group('calibration')
         self.h5_channel_units = self.h5_config.create_group('channel_units')
 
@@ -158,24 +139,20 @@ class BoardStateLogger:
         self.demand_channel_map[key] = channel_name
         return channel_name
 
-    def _classify_group(self, hw_type: str) -> str:
-        return self.groups_by_hw_type.get(hw_type, 'misc')
-
     def _signal_type_for(self, hw_type: str, is_demand: bool) -> str:
         if is_demand:
-            return self.demand_signal_type
-        return self.signal_type_by_hw_type.get(hw_type, self.default_signal_type)
+            return 'actuator_demand'
+        if hw_type in self.ACTUATOR_HW_TYPES:
+            return 'actuator_actual'
+        return 'sensor'
 
     def _is_status_state(self, state_name: str) -> bool:
         return state_name in self.status_state_names
 
     def _plot_group_for(self, hw_type: str, unit: str) -> str:
-        configured = self.groups_by_hw_type.get(hw_type)
-        if isinstance(configured, str) and configured.strip():
-            return configured.strip()
         if isinstance(unit, str) and unit.strip():
             return unit.strip().lower()
-        return 'misc'
+        return hw_type or 'misc'
 
     def _create_channel(self, channel_name: str, unit: str, signal_type: str, hw_type: str, is_adc: bool, plot_group: str) -> None:
         if channel_name in self.channel_datasets:
@@ -211,7 +188,7 @@ class BoardStateLogger:
     def _get_unit(self, item_data: dict, state_name: str) -> str:
         if isinstance(item_data, dict) and 'unit' in item_data and item_data['unit'] is not None:
             return str(item_data['unit'])
-        return str(self.units_by_state.get(state_name, self.unknown_unit))
+        return ''
 
     def _to_numeric_or_nan(self, value):
         if value is None:
@@ -462,6 +439,4 @@ class BoardStateLogger:
         self.current_csv = None
         self.csv_writer = None
         self.h5_file = None
-
-        self._generate_report()
 

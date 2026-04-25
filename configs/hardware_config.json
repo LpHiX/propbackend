@@ -2,7 +2,7 @@
     "boards": {
         "ActuatorBoard": {
             "is_actuator": true,
-            "polling_interval": 0.1,
+            "polling_interval": 0.02,
             "serial": {
                 "port": "/dev/ttyAMA2",
                 "baudrate": 921600
@@ -32,25 +32,53 @@
             }
         },
         "SensorBoard": {
-            "polling_interval": 0.1,
+            "polling_interval": 0.02,
             "serial": {
-                "port": "/dev/ttyAMA1",
+                "port": "/dev/ttyAMA0",
                 "baudrate": 921600
             },
             "adc": {
+                "torque": {
+                    "channel": 0,
+                    "adc": true,
+                    "offset": 2550,
+                    "gain": -0.0004,
+                    "unit": "Nm"
+                },
+                "esc_v": {
+                    "channel": 1,
+                    "adc": true,
+                    "offset": 0,
+                    "gain": 6,
+                    "unit": "V"
+                },
                 "rpm": {
-                    "channel": 6,
+                    "channel": 2,
                     "adc": true,
                     "offset": 0,
                     "gain": 5,
-                    "unit": "rpm"
+                    "unit": "RPM"
                 },
-                "torque": {
+                "pt_in": {
+                    "channel": 3,
+                    "adc": true,
+                    "offset": 527,
+                    "gain": 0.01723689,
+                    "unit": "bar"
+                },
+                "pt_out": {
+                    "channel": 4,
+                    "adc": true,
+                    "offset": 551,
+                    "gain": 0.01723689,
+                    "unit": "bar"
+                },
+                "pt_pump": {
                     "channel": 5,
                     "adc": true,
                     "offset": 0,
-                    "gain": 0.0002,
-                    "unit": "N_m"
+                    "gain": 0.02757898,
+                    "unit": "bar"
                 },
                 "motor_current": {
                     "channel": 7,
@@ -58,42 +86,29 @@
                     "offset": 2561,
                     "gain": -0.045674,
                     "unit": "A"
-                },
-                "pt_in": {
-                    "channel": 2,
-                    "adc": true,
-                    "offset": 481,
-                    "gain": 0.017241379,
-                    "unit": "bar"
-                },
-                "pt_out": {
-                    "channel": 3,
-                    "adc": true,
-                    "offset": 546,
-                    "gain": 0.017241379,
-                    "unit": "bar"
-                },
-                "pt_post": {
-                    "channel": 4,
-                    "adc": true,
-                    "offset": 440.5,
-                    "gain": 0.0275862,
-                    "unit": "bar"
+                }
+            },
+            "fms": {
+                "fm0": {
+                    "channel": 0,
+                    "unit": "l/s"
                 }
             }
         },
         "ThermoBoard": {
-            "polling_interval": 0.1,
+            "polling_interval": 0.02,
             "serial": {
-                "port": "/dev/ttyAMA0",
+                "port": "/dev/ttyAMA1",
                 "baudrate": 921600
             },
             "tcs": {
                 "0": {
-                    "channel": 0
+                    "channel": 0,
+                    "unit": "C"
                 },
                 "1": {
-                    "channel": 1
+                    "channel": 1,
+                    "unit": "C"
                 }
             }
         }
@@ -158,56 +173,6 @@
         }
     },
     "logging": {
-        "schema_version": "1.1",
-        "units_by_state": {
-            "mv": "mV",
-            "temperature": "C",
-            "load": "N",
-            "rpm": "rpm",
-            "armed": "bool",
-            "powered": "bool",
-            "state": "state",
-            "angle": "deg",
-            "angle0": "deg",
-            "angle1": "deg",
-            "a_x": "m_s2",
-            "a_y": "m_s2",
-            "a_z": "m_s2",
-            "g_x": "deg_s",
-            "g_y": "deg_s",
-            "g_z": "deg_s",
-            "la": "deg",
-            "lo": "deg",
-            "alt": "m",
-            "m_x": "uT",
-            "m_y": "uT",
-            "m_z": "uT",
-            "v": "V",
-            "flowrate": "kg_s"
-        },
-        "groups_by_hw_type": {
-            "tcs": "temperature",
-            "imus": "inertial",
-            "gps": "inertial",
-            "mags": "inertial",
-            "baros": "inertial",
-            "servos": "actuators",
-            "solenoids": "actuators",
-            "pyros": "actuators",
-            "tvcs": "actuators",
-            "tachos": "rotational",
-            "lcs": "load",
-            "fms": "flow",
-            "voltage": "electrical"
-        },
-        "signal_type_by_hw_type": {
-            "servos": "actuator_actual",
-            "solenoids": "actuator_actual",
-            "pyros": "actuator_actual",
-            "tvcs": "actuator_actual"
-        },
-        "default_signal_type": "sensor",
-        "demand_signal_type": "actuator_demand",
-        "unknown_unit": "unknown"
+        "schema_version": "1.2"
     }
 }
