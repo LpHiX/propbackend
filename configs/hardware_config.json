@@ -52,7 +52,7 @@
                     "channel": 1,
                     "adc": true,
                     "offset": 0,
-                    "gain": 6,
+                    "gain": 0.006,
                     "unit": "V"
                 },
                 "rpm": {
@@ -65,21 +65,21 @@
                 "pt_in": {
                     "channel": 3,
                     "adc": true,
-                    "offset": 527,
+                    "offset": 598,
                     "gain": 0.01723689,
                     "unit": "bar"
                 },
                 "pt_out": {
                     "channel": 4,
                     "adc": true,
-                    "offset": 551,
+                    "offset": 540,
                     "gain": 0.01723689,
                     "unit": "bar"
                 },
                 "pt_pump": {
                     "channel": 5,
                     "adc": true,
-                    "offset": 0,
+                    "offset": 437,
                     "gain": 0.02757898,
                     "unit": "bar"
                 },
@@ -105,11 +105,11 @@
                 "baudrate": 921600
             },
             "tcs": {
-                "0": {
+                "motor": {
                     "channel": 0,
                     "unit": "C"
                 },
-                "1": {
+                "esc": {
                     "channel": 1,
                     "unit": "C"
                 }

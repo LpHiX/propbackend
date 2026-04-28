@@ -1,35 +1,68 @@
 {
-    "notes": "Testing if notes work, 2",
+    "notes": "Low throttle ramping, 30 seconds, 50 esc throttle,, 0-180 outlet throttle, 0 inlet throttle",
     "time_before_ignition": 4,
     "hotfire_safing_time": 4,
     "start_end_desiredstate": {
         "ActuatorBoard": {
             "servos": {
+                "Motor": {
+                    "armed": true,
+                    "angle": 0
+                },
                 "PumpOutlet": {
                     "armed": true,
                     "angle": 0
+                },
+                "PumpInlet": {
+                    "armed": true,
+                    "angle": 0
+                }
+            },
+            "solenoids": {
+                "rl": {
+                    "armed": false,
+                    "powered": false
                 }
             }
         }
     },
     "sequence": {
-        "0": {
+        "-3": {
             "ActuatorBoard": {
-                "servos": {
-                    "PumpOutlet": {
+                "solenoids": {
+                    "rl": {
                         "armed": true,
-                        "angle": 0,
-                        "ramp_to_next": true
+                        "powered": true
                     }
                 }
             }
         },
-        "5": {
+        "0": {
+            "ActuatorBoard": {
+                "servos": {
+                    "Motor": {
+                        "armed": true,
+                        "angle": 30
+                    },
+                    "PumpOutlet": {
+                        "armed": true,
+                        "angle": 0
+                    }
+                }
+            }
+        },
+        "30": {
             "ActuatorBoard": {
                 "servos": {
                     "PumpOutlet": {
                         "armed": true,
                         "angle": 180
+                    }
+                },
+                "solenoids": {
+                    "rl": {
+                        "armed": false,
+                        "powered": false
                     }
                 }
             }
