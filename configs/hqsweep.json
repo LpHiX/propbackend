@@ -1,0 +1,71 @@
+{
+    "notes": "HQ Ramp: 30 seconds, 30 esc throttle, 0-180 outlet throttle, 0 inlet throttle",
+    "time_before_ignition": 4,
+    "hotfire_safing_time": 4,
+    "start_end_desiredstate": {
+        "ActuatorBoard": {
+            "servos": {
+                "Motor": {
+                    "armed": true,
+                    "angle": 0
+                },
+                "PumpOutlet": {
+                    "armed": true,
+                    "angle": 0
+                },
+                "PumpInlet": {
+                    "armed": true,
+                    "angle": 0
+                }
+            },
+            "solenoids": {
+                "rl": {
+                    "armed": false,
+                    "powered": false
+                }
+            }
+        }
+    },
+    "sequence": {
+        "-3": {
+            "ActuatorBoard": {
+                "solenoids": {
+                    "rl": {
+                        "armed": true,
+                        "powered": true
+                    }
+                }
+            }
+        },
+        "0": {
+            "ActuatorBoard": {
+                "servos": {
+                    "Motor": {
+                        "armed": true,
+                        "angle": 30
+                    },
+                    "PumpOutlet": {
+                        "armed": true,
+                        "angle": 0
+                    }
+                }
+            }
+        },
+        "30": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpOutlet": {
+                        "armed": true,
+                        "angle": 180
+                    }
+                },
+                "solenoids": {
+                    "rl": {
+                        "armed": false,
+                        "powered": false
+                    }
+                }
+            }
+        }
+    }
+}
