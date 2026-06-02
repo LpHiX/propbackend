@@ -64,23 +64,23 @@
                 },
                 "pt_in": {
                     "channel": 3,
+                    "offset": 502.5,
                     "adc": true,
-                    "offset": 598,
-                    "gain": 0.01723689,
+                    "gain": 0.00305,
                     "unit": "bar"
                 },
                 "pt_out": {
                     "channel": 4,
+                    "offset": 505.6,
                     "adc": true,
-                    "offset": 540,
-                    "gain": 0.01723689,
+                    "gain": 0.00305,
                     "unit": "bar"
                 },
                 "pt_pump": {
                     "channel": 5,
+                    "offset": 497,
                     "adc": true,
-                    "offset": 437,
-                    "gain": 0.02757898,
+                    "gain": 0.00305,
                     "unit": "bar"
                 },
                 "motor_current": {
@@ -106,11 +106,11 @@
             },
             "tcs": {
                 "motor": {
-                    "channel": 0,
+                    "channel": 1,
                     "unit": "C"
                 },
                 "esc": {
-                    "channel": 1,
+                    "channel": 0,
                     "unit": "C"
                 }
             }

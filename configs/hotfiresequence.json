@@ -1,5 +1,5 @@
 {
-    "notes": "Low throttle ramping, 30 seconds, 50 esc throttle,, 0-180 outlet throttle, 0 inlet throttle",
+    "notes": "Cavitation Test , 25 esc throttle, 0-180 inlet throttle, step 0-160 outlet throttle in steps of 20",
     "time_before_ignition": 4,
     "hotfire_safing_time": 4,
     "start_end_desiredstate": {
@@ -41,22 +41,220 @@
             "ActuatorBoard": {
                 "servos": {
                     "Motor": {
-                        "armed": true,
                         "angle": 30
                     },
                     "PumpOutlet": {
-                        "armed": true,
                         "angle": 0
+                    },
+                    "PumpInlet": {
+                        "angle": 0,
+                        "ramp_to_next": true
                     }
                 }
             }
         },
-        "30": {
+        "20": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 180,
+                        "ramp_to_next": true
+                    }
+                }
+            }
+        },
+        "25": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 0,
+                        "ramp_to_next": true
+                    },
+                    "PumpOutlet": {
+                        "angle": 20
+                    }
+                }
+            }
+        },
+        "45": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 180,
+                        "ramp_to_next": true
+                    }
+                }
+            }
+        },
+        "50": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 0,
+                        "ramp_to_next": true
+                    },
+                    "PumpOutlet": {
+                        "angle": 40
+                    }
+                }
+            }
+        },
+        "70": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 180,
+                        "ramp_to_next": true
+                    }
+                }
+            }
+        },
+        "75": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 0,
+                        "ramp_to_next": true
+                    },
+                    "PumpOutlet": {
+                        "angle": 60
+                    }
+                }
+            }
+        },
+        "95": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 180,
+                        "ramp_to_next": true
+                    }
+                }
+            }
+        },
+        "100": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 0,
+                        "ramp_to_next": true
+                    },
+                    "PumpOutlet": {
+                        "angle": 80
+                    }
+                }
+            }
+        },
+        "120": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 180,
+                        "ramp_to_next": true
+                    }
+                }
+            }
+        },
+        "125": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 0,
+                        "ramp_to_next": true
+                    },
+                    "PumpOutlet": {
+                        "angle": 100
+                    }
+                }
+            }
+        },
+        "145": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 180,
+                        "ramp_to_next": true
+                    }
+                }
+            }
+        },
+        "150": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 0,
+                        "ramp_to_next": true
+                    },
+                    "PumpOutlet": {
+                        "angle": 120
+                    }
+                }
+            }
+        },
+        "170": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 180,
+                        "ramp_to_next": true
+                    }
+                }
+            }
+        },
+        "175": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 0,
+                        "ramp_to_next": true
+                    },
+                    "PumpOutlet": {
+                        "angle": 140
+                    }
+                }
+            }
+        },
+        "195": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 180,
+                        "ramp_to_next": true
+                    }
+                }
+            }
+        },
+        "200": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 0,
+                        "ramp_to_next": true
+                    },
+                    "PumpOutlet": {
+                        "angle": 160
+                    }
+                }
+            }
+        },
+        "220": {
+            "ActuatorBoard": {
+                "servos": {
+                    "PumpInlet": {
+                        "angle": 180,
+                        "ramp_to_next": true
+                    }
+                }
+            }
+        },
+        "225": {
             "ActuatorBoard": {
                 "servos": {
                     "PumpOutlet": {
-                        "armed": true,
-                        "angle": 180
+                        "angle": 0
+                    },
+                    "PumpInlet": {
+                        "angle": 0
                     }
                 },
                 "solenoids": {
