@@ -1,5 +1,5 @@
 {
-    "notes": "Full test: H-Q then Cavitation: 30 esc throttle, 0-180 inlet throttle, step 20-160 outlet throttle in steps of 20",
+    "notes": "Full test: H-Q then Cavitation: 55 esc throttle, 0-180 inlet throttle, step 20-160 outlet throttle in steps of 20",
     "time_before_ignition": 4,
     "hotfire_safing_time": 4,
     "start_end_desiredstate": {
@@ -41,7 +41,7 @@
             "ActuatorBoard": {
                 "servos": {
                     "Motor": {
-                        "angle": 30
+                        "angle": 55
                     },
                     "PumpOutlet": {
                         "angle": 0,

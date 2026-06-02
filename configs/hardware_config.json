@@ -105,7 +105,7 @@
                 "baudrate": 921600
             },
             "tcs": {
-                "motor": {
+                "water_out": {
                     "channel": 1,
                     "unit": "C"
                 },
